@@ -31,6 +31,21 @@ def main() -> int:
     settings_parser.add_argument("--root", type=Path, default=Path.cwd())
     settings_parser.add_argument("--file", type=Path, required=True)
 
+    import_accounts_parser = subparsers.add_parser("import-accounts", help="Import accounts from CSV or Excel.")
+    import_accounts_parser.add_argument("--root", type=Path, default=Path.cwd())
+    import_accounts_parser.add_argument("--file", type=Path, required=True)
+    import_accounts_parser.add_argument("--source-name", default="import")
+
+    export_accounts_parser = subparsers.add_parser("export-accounts", help="Export accounts to CSV or Excel.")
+    export_accounts_parser.add_argument("--root", type=Path, default=Path.cwd())
+    export_accounts_parser.add_argument("--file", type=Path, required=True)
+    export_accounts_parser.add_argument("--keyword", default="")
+    export_accounts_parser.add_argument("--status", default="")
+
+    import_proxies_parser = subparsers.add_parser("import-proxies", help="Import proxies from a text file.")
+    import_proxies_parser.add_argument("--root", type=Path, default=Path.cwd())
+    import_proxies_parser.add_argument("--file", type=Path, required=True)
+
     args = parser.parse_args()
     if args.command == "snapshot":
         return _snapshot(args.root)
@@ -38,17 +53,24 @@ def main() -> int:
         return _run_task(args)
     if args.command == "save-settings":
         return _save_settings(args.root, args.file)
+    if args.command == "import-accounts":
+        return _import_accounts(args.root, args.file, args.source_name)
+    if args.command == "export-accounts":
+        return _export_accounts(args.root, args.file, args.keyword, args.status)
+    if args.command == "import-proxies":
+        return _import_proxies(args.root, args.file)
     return 1
 
 
 def _snapshot(root: Path) -> int:
     services = bootstrap_services(root)
+    tasks = services.tasks.runner.list_tasks()
     payload = {
         "generated_at": _serialize_datetime(datetime.now()),
         "summary": {
             "account_count": len(services.accounts.list_account_summaries()),
             "proxy_count": len(services.proxies.list_proxies()),
-            "task_count": len(services.tasks.runner.list_tasks()),
+            "task_count": len(tasks),
         },
         "accounts": [
             {
@@ -78,7 +100,7 @@ def _snapshot(root: Path) -> int:
                     for log in services.tasks.runner.get_logs(task.id or 0, 8)
                 ],
             }
-            for task in services.tasks.runner.list_tasks()
+            for task in tasks
         ],
         "proxies": [
             {
@@ -91,6 +113,8 @@ def _snapshot(root: Path) -> int:
             for proxy in services.proxies.list_proxies()
         ],
         "settings": services.settings.load(),
+        "latest_task_summary": _serialize_latest_task(tasks[0] if tasks else None),
+        "alerts": _build_alerts(tasks),
     }
     print(json.dumps(payload, ensure_ascii=False))
     return 0
@@ -126,6 +150,30 @@ def _save_settings(root: Path, file_path: Path) -> int:
     return 0
 
 
+def _import_accounts(root: Path, file_path: Path, source_name: str) -> int:
+    services = bootstrap_services(root)
+    imported = services.accounts.import_accounts(file_path, source_name=source_name)
+    print(json.dumps({"imported": imported, "path": str(file_path)}, ensure_ascii=False))
+    return 0
+
+
+def _export_accounts(root: Path, file_path: Path, keyword: str, status: str) -> int:
+    services = bootstrap_services(root)
+    accounts = services.accounts.list_accounts(keyword=keyword)
+    if status:
+        accounts = [account for account in accounts if str(account.status) == status]
+    services.accounts.export_accounts(file_path, accounts)
+    print(json.dumps({"exported": len(accounts), "path": str(file_path)}, ensure_ascii=False))
+    return 0
+
+
+def _import_proxies(root: Path, file_path: Path) -> int:
+    services = bootstrap_services(root)
+    imported = services.proxies.import_lines(file_path.read_text(encoding="utf-8").splitlines())
+    print(json.dumps({"imported": imported, "path": str(file_path)}, ensure_ascii=False))
+    return 0
+
+
 def _serialize_account_summary(summary) -> dict[str, Any]:
     account = summary.account
     return {
@@ -148,6 +196,35 @@ def _serialize_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat(timespec="seconds")
+
+
+def _serialize_latest_task(task) -> dict[str, Any] | None:
+    if task is None:
+        return None
+    return {
+        "id": task.id,
+        "task_type": task.task_type,
+        "status": task.status,
+        "success_count": task.success_count,
+        "failure_count": task.failure_count,
+        "finished_at": _serialize_datetime(task.finished_at),
+        "latest_error": task.latest_error,
+    }
+
+
+def _build_alerts(tasks) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    for task in tasks[:5]:
+        if task.latest_error:
+            alerts.append(
+                {
+                    "kind": "error",
+                    "title": f"任务 #{task.id} 执行异常",
+                    "detail": task.latest_error,
+                    "task_id": task.id,
+                }
+            )
+    return alerts
 
 
 if __name__ == "__main__":

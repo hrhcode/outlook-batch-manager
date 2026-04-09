@@ -1,7 +1,27 @@
+export type ThemeMode = "dark" | "light";
+export type AppView = "dashboard" | "tasks" | "accounts" | "proxies" | "settings";
+
 export interface SnapshotSummary {
   account_count: number;
   proxy_count: number;
   task_count: number;
+}
+
+export interface LatestTaskSummary {
+  id: number | null;
+  task_type: string;
+  status: string;
+  success_count: number;
+  failure_count: number;
+  finished_at: string | null;
+  latest_error: string;
+}
+
+export interface SnapshotAlert {
+  kind: "error" | "warning" | "info";
+  title: string;
+  detail: string;
+  task_id?: number | null;
 }
 
 export interface AccountItem {
@@ -64,6 +84,8 @@ export interface AppSettings {
 export interface AppSnapshot {
   generated_at: string;
   summary: SnapshotSummary;
+  latest_task_summary: LatestTaskSummary | null;
+  alerts: SnapshotAlert[];
   accounts: AccountItem[];
   tasks: TaskItem[];
   proxies: ProxyItem[];
@@ -79,3 +101,14 @@ export interface RunTaskPayload {
   headless?: boolean;
 }
 
+export interface ImportResult {
+  imported: number;
+  path: string;
+  cancelled?: boolean;
+}
+
+export interface ExportResult {
+  exported: number;
+  path: string;
+  cancelled?: boolean;
+}
