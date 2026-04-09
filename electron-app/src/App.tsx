@@ -363,7 +363,6 @@ export default function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark" />
           <h1>Outlook Batch Manager</h1>
         </div>
 
