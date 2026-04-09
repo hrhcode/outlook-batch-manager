@@ -9,8 +9,12 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+node_modules/
 build/
 dist/
+electron-app/dist/
+electron-app/dist-electron/
+electron-app/node_modules/
 *.egg-info/
 *.log
 *.sqlite3
@@ -26,4 +30,3 @@ playwright-report/
 test-results/
 .idea/
 .vscode/
-
