@@ -2,7 +2,6 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StatusBanner } from "./components/StatusBanner";
 import { ThemeSwitch } from "./components/ThemeSwitch";
-import { compactPath } from "./lib/format";
 import { AccountsPage } from "./pages/AccountsPage";
 import { BatchRegisterPage } from "./pages/BatchRegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -361,41 +360,33 @@ export default function App() {
             </button>
           ))}
         </nav>
-
-        <div className="sidebar-meta">
-          <div className="meta-card">
-            <p>项目目录</p>
-            <strong title={meta?.projectRoot}>{compactPath(meta?.projectRoot ?? "-")}</strong>
-          </div>
-          <div className="meta-card">
-            <p>Python 环境</p>
-            <strong title={meta?.pythonExecutable}>{compactPath(meta?.pythonExecutable ?? "-")}</strong>
-          </div>
-          <div className="meta-card">
-            <p>最近刷新</p>
-            <strong>{snapshot.generated_at}</strong>
-          </div>
-        </div>
       </aside>
 
       <main className="content">
         <section className="topbar">
-          <div>
+          <div className="topbar-copy">
             <p className="eyebrow">{viewMeta.eyebrow}</p>
-            <h2>{viewMeta.label}</h2>
+            <span className="topbar-label">{viewMeta.description}</span>
           </div>
           <div className="topbar-actions">
-            <ThemeSwitch theme={theme} onChange={setTheme} />
-            <button className="ghost-button" onClick={() => void loadSnapshot()} disabled={busy}>
-              刷新工作台
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="刷新工作台"
+              title="刷新工作台"
+              onClick={() => void loadSnapshot()}
+              disabled={busy}
+            >
+              <span aria-hidden="true">↻</span>
             </button>
+            <ThemeSwitch theme={theme} onChange={setTheme} />
           </div>
         </section>
 
         <StatusBanner error={error} notice={notice} />
 
         {activeView === "dashboard" ? (
-          <DashboardPage snapshot={snapshot} onNavigate={setActiveView} />
+          <DashboardPage snapshot={snapshot} meta={meta} onNavigate={setActiveView} />
         ) : null}
 
         {activeView === "register" ? (

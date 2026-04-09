@@ -1,22 +1,24 @@
 import type { ThemeMode } from "../types";
 
-export function ThemeSwitch(props: { theme: ThemeMode; onChange: (theme: ThemeMode) => void }) {
+type ThemeSwitchProps = {
+  theme: ThemeMode;
+  onChange: (theme: ThemeMode) => void;
+};
+
+export function ThemeSwitch(props: ThemeSwitchProps) {
+  const nextTheme = props.theme === "dark" ? "light" : "dark";
+  const icon = props.theme === "dark" ? "☀" : "☾";
+  const label = props.theme === "dark" ? "切换到浅色主题" : "切换到深色主题";
+
   return (
-    <div className="theme-switch" role="tablist" aria-label="主题切换">
-      <button
-        type="button"
-        className={props.theme === "dark" ? "theme-button active" : "theme-button"}
-        onClick={() => props.onChange("dark")}
-      >
-        Dark
-      </button>
-      <button
-        type="button"
-        className={props.theme === "light" ? "theme-button active" : "theme-button"}
-        onClick={() => props.onChange("light")}
-      >
-        Light
-      </button>
-    </div>
+    <button
+      type="button"
+      className="icon-button"
+      aria-label={label}
+      title={label}
+      onClick={() => props.onChange(nextTheme)}
+    >
+      <span aria-hidden="true">{icon}</span>
+    </button>
   );
 }
