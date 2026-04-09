@@ -4,9 +4,19 @@ export function StatusBanner(props: { error: string; notice: string }) {
   }
 
   return (
-    <section className="status-row" aria-live="polite">
-      {props.error ? <div className="status-pill error">{props.error}</div> : null}
-      {props.notice ? <div className="status-pill success">{props.notice}</div> : null}
+    <section className="banner-stack" aria-live="polite">
+      {props.error ? (
+        <div className="banner-card banner-card-danger">
+          <strong>处理失败</strong>
+          <p>{props.error}</p>
+        </div>
+      ) : null}
+      {props.notice ? (
+        <div className="banner-card banner-card-success">
+          <strong>操作完成</strong>
+          <p>{props.notice}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

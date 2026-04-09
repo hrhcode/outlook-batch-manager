@@ -2,6 +2,8 @@ import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StatusBanner } from "./components/StatusBanner";
 import { ThemeSwitch } from "./components/ThemeSwitch";
+import { NAV_ITEMS, VIEW_META } from "./lib/content";
+import { compactPath, formatDateTime } from "./lib/format";
 import { AccountsPage } from "./pages/AccountsPage";
 import { BatchRegisterPage } from "./pages/BatchRegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -29,22 +31,6 @@ const emptySettings: AppSettings = {
   mail_protocols: {
     imap: { enabled: true, host: "outlook.office365.com", port: 993, use_ssl: true },
   },
-};
-
-const navigation: Array<{ id: AppView; label: string }> = [
-  { id: "dashboard", label: "仪表盘" },
-  { id: "register", label: "批量注册" },
-  { id: "accounts", label: "账号中心" },
-  { id: "mail", label: "邮件中心" },
-  { id: "settings", label: "设置" },
-];
-
-const viewContent: Record<AppView, { title: string; description: string }> = {
-  dashboard: { title: "仪表盘", description: "查看账号池、IMAP 收件同步和运行状态的总览信息。" },
-  register: { title: "批量注册", description: "保留批量注册作为系统核心能力，并与账号中心协同工作。" },
-  accounts: { title: "账号中心", description: "统一管理账号导入、IMAP OAuth 授权补齐、联通检测和批量删除。" },
-  mail: { title: "邮件中心", description: "只针对已联通账号进行 IMAP 收件同步，并查看邮件列表和详情。" },
-  settings: { title: "设置", description: "配置 IMAP OAuth、同步参数、代理池和测试模式。" },
 };
 
 export default function App() {
@@ -92,6 +78,7 @@ export default function App() {
       setSnapshot(nextSnapshot);
       setMeta(nextMeta);
       setSettingsDraft(nextSnapshot.settings);
+
       const registerTasks = nextSnapshot.tasks.filter((task) => task.task_type === "register");
       if (registerTasks.length > 0) {
         const selectedStillExists = registerTasks.some((task) => task.id === selectedTaskId);
@@ -99,9 +86,10 @@ export default function App() {
           setSelectedTaskId(registerTasks[0].id);
         }
       }
+
       setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "读取工作台数据失败。");
+      setError(caught instanceof Error ? caught.message : "读取工作台快照失败。");
     } finally {
       setLoading(false);
     }
@@ -148,10 +136,11 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [activeView, mailFilters.accountId, mailFilters.keyword, mailFilters.unreadOnly, mailFilters.source]);
 
-  const currentView = viewContent[activeView];
+  const currentViewMeta = VIEW_META[activeView];
   const accounts = useMemo(() => snapshot?.accounts ?? [], [snapshot]);
   const connectedAccounts = useMemo(() => accounts.filter((item) => item.connectivity_status === "connected"), [accounts]);
   const registerTasks = useMemo(() => (snapshot?.tasks ?? []).filter((task) => task.task_type === "register"), [snapshot]);
+  const currentNav = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
 
   async function authorizeAccount(accountId: number) {
     setBusy(true);
@@ -163,6 +152,26 @@ export default function App() {
       setNotice(`已完成 IMAP OAuth 授权：${result.email_address}`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "补充 IMAP OAuth 授权失败。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateAccountAuth(accountId: number, payload: { clientId?: string; refreshToken?: string }) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    try {
+      await window.desktopApi.updateAccountAuth({
+        accountId,
+        ...(payload.clientId ? { clientId: payload.clientId } : {}),
+        ...(payload.refreshToken ? { refreshToken: payload.refreshToken } : {}),
+      });
+      await loadSnapshot();
+      setNotice("账号凭证已更新，可以继续做联通检测。");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "更新账号凭证失败。");
     } finally {
       setBusy(false);
     }
@@ -200,7 +209,7 @@ export default function App() {
     try {
       await window.desktopApi.saveSettings(settingsDraft);
       await loadSnapshot();
-      setNotice(`设置已保存，当前模式为 ${settingsDraft.mock_mode ? "测试" : "生产"}。`);
+      setNotice(`设置已保存，当前模式为${settingsDraft.mock_mode ? "测试 / 演示" : "生产"}。`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存设置失败。");
     } finally {
@@ -214,6 +223,7 @@ export default function App() {
       setNotice("请先选择要删除的账号。");
       return;
     }
+
     setBusy(true);
     setError("");
     setNotice("");
@@ -243,19 +253,58 @@ export default function App() {
     }
   }
 
+  async function testAccounts(accountIds: number[]) {
+    if (accountIds.length === 0) {
+      setError("");
+      setNotice("请先选择要检测的账号。");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setNotice("");
+
+    let success = 0;
+    const failedIds: number[] = [];
+
+    try {
+      for (const accountId of accountIds) {
+        try {
+          const result = await window.desktopApi.testAccountMailCapability(accountId);
+          if (result.success) {
+            success += 1;
+          } else {
+            failedIds.push(accountId);
+          }
+        } catch {
+          failedIds.push(accountId);
+        }
+      }
+
+      await loadSnapshot();
+      setNotice(`批量检测完成：成功 ${success} 个，失败 ${failedIds.length} 个。`);
+      if (failedIds.length > 0) {
+        setError(`以下账号检测失败：${failedIds.slice(0, 6).join("、")}${failedIds.length > 6 ? " 等" : ""}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function syncAccounts(accountIds: number[]) {
     if (accountIds.length === 0) {
       setError("");
-      setNotice("当前没有可同步的已联通账号。");
+      setNotice("当前没有可同步的账号。");
       return;
     }
+
     setBusy(true);
     setError("");
     setNotice("");
     try {
       const result = await window.desktopApi.syncMailBatch({ accountIds, limit: settingsDraft.mail.sync_batch_size });
       await Promise.all([loadSnapshot(), loadMail()]);
-      setNotice(`批量同步完成：成功 ${result.success} 个，失败 ${result.failed} 个。`);
+      setNotice(`邮件同步完成：成功 ${result.success} 个，失败 ${result.failed} 个。`);
       setActiveView("mail");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "批量同步邮件失败。");
@@ -299,38 +348,54 @@ export default function App() {
   }
 
   if (loading || !snapshot) {
-    return <div className="shell loading">Loading workspace...</div>;
+    return <div className="app-loading">正在加载桌面工作台...</div>;
   }
 
   return (
-    <div className="shell">
+    <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand">
-          <h1>Outlook IMAP Console</h1>
+        <div className="brand-card">
+          <span className="brand-pill">Desktop Ops Console</span>
+          <h1>Outlook Batch Manager</h1>
+          <p>批量注册、账号运营与邮件同步的统一桌面工作台。</p>
         </div>
 
         <nav className="nav-list" aria-label="main navigation">
-          {navigation.map((item) => (
-            <button key={item.id} type="button" className={activeView === item.id ? "nav-button active" : "nav-button"} onClick={() => setActiveView(item.id)}>
-              <span>{item.label}</span>
+          {NAV_ITEMS.map((item) => (
+            <button key={item.id} type="button" className={activeView === item.id ? "nav-item active" : "nav-item"} onClick={() => setActiveView(item.id)}>
+              <span className="nav-item-title">{item.label}</span>
+              <span className="nav-item-caption">{item.caption}</span>
             </button>
           ))}
         </nav>
+
+        <div className="sidebar-meta">
+          <div className="meta-block">
+            <span>当前页面</span>
+            <strong>{currentNav.label}</strong>
+            <p>{currentViewMeta.description}</p>
+          </div>
+          <div className="meta-block">
+            <span>项目目录</span>
+            <strong>{compactPath(meta?.projectRoot ?? "—", 36)}</strong>
+          </div>
+        </div>
       </aside>
 
-      <main className="content">
-        <section className="topbar">
-          <div className="topbar-copy">
-            <h2>{currentView.title}</h2>
-            <p>{currentView.description}</p>
+      <main className="workspace">
+        <header className="workspace-topbar">
+          <div>
+            <p className="eyebrow">Overview</p>
+            <h2>统一桌面运营工作台</h2>
+            <p className="workspace-subtitle">最新快照 {formatDateTime(snapshot.generated_at)} · 账号 {snapshot.summary.account_count} · 邮件 {snapshot.mail_summary.total_messages}</p>
           </div>
-          <div className="topbar-actions">
-            <button type="button" className="icon-button" onClick={() => void loadSnapshot()} disabled={busy}>
-              <span aria-hidden="true">刷新</span>
+          <div className="button-row">
+            <button type="button" className="secondary-button" onClick={() => void loadSnapshot()} disabled={busy}>
+              刷新快照
             </button>
             <ThemeSwitch theme={theme} onChange={setTheme} />
           </div>
-        </section>
+        </header>
 
         <StatusBanner error={error} notice={notice} />
 
@@ -358,7 +423,9 @@ export default function App() {
             onAuthorizeAccount={(accountId) => void authorizeAccount(accountId)}
             onDeleteAccounts={(accountIds) => void deleteAccounts(accountIds)}
             onTestAccount={(accountId) => void testAccount(accountId)}
+            onTestAccounts={(accountIds) => void testAccounts(accountIds)}
             onSyncAccounts={(accountIds) => void syncAccounts(accountIds)}
+            onUpdateAccountAuth={(accountId, payload) => void updateAccountAuth(accountId, payload)}
           />
         ) : null}
 
@@ -377,14 +444,7 @@ export default function App() {
         ) : null}
 
         {activeView === "settings" ? (
-          <SettingsPage
-            settings={settingsDraft}
-            proxies={snapshot.proxies}
-            busy={busy}
-            onChange={setSettingsDraft}
-            onSave={(event) => void saveSettings(event)}
-            onImportProxies={() => void importProxies()}
-          />
+          <SettingsPage settings={settingsDraft} proxies={snapshot.proxies} busy={busy} onChange={setSettingsDraft} onSave={(event) => void saveSettings(event)} onImportProxies={() => void importProxies()} />
         ) : null}
       </main>
     </div>
