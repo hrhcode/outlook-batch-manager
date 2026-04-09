@@ -1,7 +1,13 @@
-import { FormEvent, useEffect, useState } from "react";
-import type { AppSettings, AppSnapshot, RunTaskPayload, TaskItem } from "./types";
-
-type ThemeMode = "dark" | "light";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { StatusBanner } from "./components/StatusBanner";
+import { ThemeSwitch } from "./components/ThemeSwitch";
+import { compactPath } from "./lib/format";
+import { AccountsPage } from "./pages/AccountsPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { ProxiesPage } from "./pages/ProxiesPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { TasksPage } from "./pages/TasksPage";
+import type { AppSettings, AppSnapshot, AppView, RunTaskPayload, ThemeMode } from "./types";
 
 const emptySettings: AppSettings = {
   browser_channel: "chromium",
@@ -16,6 +22,14 @@ const emptySettings: AppSettings = {
   scopes: [],
 };
 
+const navigation: Array<{ id: AppView; label: string; eyebrow: string }> = [
+  { id: "dashboard", label: "仪表盘", eyebrow: "Overview" },
+  { id: "tasks", label: "任务中心", eyebrow: "Tasks" },
+  { id: "accounts", label: "账号库", eyebrow: "Accounts" },
+  { id: "proxies", label: "代理池", eyebrow: "Proxies" },
+  { id: "settings", label: "系统设置", eyebrow: "Settings" },
+];
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [meta, setMeta] = useState<{ projectRoot: string; pythonExecutable: string } | null>(null);
@@ -23,9 +37,12 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [query, setQuery] = useState("");
+  const [activeView, setActiveView] = useState<AppView>("dashboard");
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(emptySettings);
+  const [accountKeyword, setAccountKeyword] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
   const [registerConfig, setRegisterConfig] = useState({
     batchSize: 5,
     concurrentWorkers: 2,
@@ -53,9 +70,17 @@ export default function App() {
         window.desktopApi.getMeta(),
       ]);
       setSnapshot(nextSnapshot);
-      setSettingsDraft(nextSnapshot.settings);
       setMeta(nextMeta);
+      if (activeView !== "settings" || !snapshot) {
+        setSettingsDraft(nextSnapshot.settings);
+      }
       setError("");
+      if (nextSnapshot.tasks.length) {
+        const selectedStillExists = nextSnapshot.tasks.some((task) => task.id === selectedTaskId);
+        if (selectedTaskId === null || !selectedStillExists) {
+          setSelectedTaskId(nextSnapshot.tasks[0].id);
+        }
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "读取数据失败");
     } finally {
@@ -71,12 +96,28 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  const filteredAccounts = useMemo(() => {
+    const allAccounts = snapshot?.accounts ?? [];
+    return allAccounts.filter((account) => {
+      const keywordMatch = !accountKeyword.trim()
+        ? true
+        : [account.email, account.group_name, account.notes, account.status]
+            .join(" ")
+            .toLowerCase()
+            .includes(accountKeyword.toLowerCase());
+      const statusMatch = accountStatus ? account.status === accountStatus : true;
+      return keywordMatch && statusMatch;
+    });
+  }, [snapshot, accountKeyword, accountStatus]);
+
   async function runTask(payload: RunTaskPayload, successText: string) {
     setBusy(true);
     setNotice("");
     setError("");
     try {
-      await window.desktopApi.runTask(payload);
+      const result = await window.desktopApi.runTask(payload);
+      setSelectedTaskId(result.task_id);
+      setActiveView("tasks");
       await loadSnapshot();
       setNotice(successText);
     } catch (caught) {
@@ -102,19 +143,65 @@ export default function App() {
     }
   }
 
-  const filteredAccounts =
-    snapshot?.accounts.filter((account) => {
-      if (!query.trim()) return true;
-      const term = query.toLowerCase();
-      return [account.email, account.group_name, account.notes, account.status]
-        .join(" ")
-        .toLowerCase()
-        .includes(term);
-    }) ?? [];
+  async function importAccounts() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const result = await window.desktopApi.importAccounts();
+      if (!("cancelled" in result && result.cancelled)) {
+        await loadSnapshot();
+        setNotice(`已导入 ${result.imported} 条账号`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "导入账号失败");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  const currentTask: TaskItem | undefined = snapshot?.tasks[0];
+  async function exportAccounts() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const result = await window.desktopApi.exportAccounts({
+        keyword: accountKeyword,
+        status: accountStatus,
+      });
+      if (!("cancelled" in result && result.cancelled)) {
+        setNotice(`已导出 ${result.exported} 条账号`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "导出账号失败");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-  if (loading) {
+  async function importProxies() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const result = await window.desktopApi.importProxies();
+      if (!("cancelled" in result && result.cancelled)) {
+        await loadSnapshot();
+        setNotice(`已导入 ${result.imported} 条代理`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "导入代理失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openTask(taskId: number | null) {
+    setActiveView("tasks");
+    setSelectedTaskId(taskId);
+  }
+
+  if (loading || !snapshot) {
     return <div className="shell loading">Loading workspace...</div>;
   }
 
@@ -129,366 +216,101 @@ export default function App() {
           </div>
         </div>
 
-        <div className="meta-card">
-          <p>项目目录</p>
-          <strong>{meta?.projectRoot}</strong>
-        </div>
-        <div className="meta-card">
-          <p>Python 环境</p>
-          <strong>{meta?.pythonExecutable}</strong>
-        </div>
-        <div className="meta-card">
-          <p>最近刷新</p>
-          <strong>{snapshot?.generated_at ?? "-"}</strong>
+        <nav className="nav-list" aria-label="主导航">
+          {navigation.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={activeView === item.id ? "nav-button active" : "nav-button"}
+              onClick={() => setActiveView(item.id)}
+            >
+              <span>{item.label}</span>
+              <small>{item.eyebrow}</small>
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-meta">
+          <div className="meta-card">
+            <p>项目目录</p>
+            <strong title={meta?.projectRoot}>{compactPath(meta?.projectRoot ?? "-")}</strong>
+          </div>
+          <div className="meta-card">
+            <p>Python 环境</p>
+            <strong title={meta?.pythonExecutable}>{compactPath(meta?.pythonExecutable ?? "-")}</strong>
+          </div>
+          <div className="meta-card">
+            <p>最近刷新</p>
+            <strong>{snapshot.generated_at}</strong>
+          </div>
         </div>
       </aside>
 
       <main className="content">
-        <section className="hero">
+        <section className="topbar">
           <div>
-            <p className="eyebrow">Minimal monochrome workspace</p>
-            <h2>只保留一套前端，界面更安静，信息更清晰。</h2>
+            <p className="eyebrow">Workspace</p>
+            <h2>单一前端工作台</h2>
           </div>
-
-          <div className="hero-actions">
-            <div className="theme-switch" role="tablist" aria-label="主题切换">
-              <button
-                type="button"
-                className={theme === "dark" ? "theme-button active" : "theme-button"}
-                onClick={() => setTheme("dark")}
-              >
-                Dark
-              </button>
-              <button
-                type="button"
-                className={theme === "light" ? "theme-button active" : "theme-button"}
-                onClick={() => setTheme("light")}
-              >
-                Light
-              </button>
-            </div>
+          <div className="topbar-actions">
+            <ThemeSwitch theme={theme} onChange={setTheme} />
             <button className="ghost-button" onClick={() => void loadSnapshot()} disabled={busy}>
               刷新视图
             </button>
           </div>
         </section>
 
-        <section className="summary-grid">
-          <MetricCard label="账号总数" value={snapshot?.summary.account_count ?? 0} />
-          <MetricCard label="代理池" value={snapshot?.summary.proxy_count ?? 0} />
-          <MetricCard label="任务总数" value={snapshot?.summary.task_count ?? 0} />
-        </section>
+        <StatusBanner error={error} notice={notice} />
 
-        {(error || notice) && (
-          <section className="status-row">
-            {error ? <div className="status-pill error">{error}</div> : null}
-            {notice ? <div className="status-pill success">{notice}</div> : null}
-          </section>
-        )}
+        {activeView === "dashboard" ? (
+          <DashboardPage snapshot={snapshot} onRefresh={() => void loadSnapshot()} onOpenTask={openTask} />
+        ) : null}
 
-        <section className="workspace-grid">
-          <article className="panel task-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">Task Console</p>
-                <h3>任务中心</h3>
-              </div>
-            </header>
+        {activeView === "tasks" ? (
+          <TasksPage
+            tasks={snapshot.tasks}
+            selectedTaskId={selectedTaskId}
+            registerConfig={registerConfig}
+            busy={busy}
+            onRefresh={() => void loadSnapshot()}
+            onSelectTask={setSelectedTaskId}
+            onConfigChange={(patch) => setRegisterConfig((current) => ({ ...current, ...patch }))}
+            onRunTask={(payload, successText) => void runTask(payload, successText)}
+          />
+        ) : null}
 
-            <div className="button-cluster">
-              <button
-                className="solid-button"
-                disabled={busy}
-                onClick={() =>
-                  void runTask(
-                    {
-                      taskType: "register",
-                      batchSize: registerConfig.batchSize,
-                      concurrentWorkers: registerConfig.concurrentWorkers,
-                      maxRetries: registerConfig.maxRetries,
-                      fetchToken: registerConfig.fetchToken,
-                      headless: registerConfig.headless,
-                    },
-                    "批量注册任务已提交",
-                  )
-                }
-              >
-                启动批量注册
-              </button>
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => void runTask({ taskType: "login_check" }, "登录校验任务已提交")}
-              >
-                登录校验
-              </button>
-              <button
-                className="ghost-button"
-                disabled={busy}
-                onClick={() => void runTask({ taskType: "token_refresh" }, "Token 刷新任务已提交")}
-              >
-                Token 刷新
-              </button>
-            </div>
+        {activeView === "accounts" ? (
+          <AccountsPage
+            accounts={filteredAccounts}
+            keyword={accountKeyword}
+            status={accountStatus}
+            busy={busy}
+            onKeywordChange={setAccountKeyword}
+            onStatusChange={setAccountStatus}
+            onRefresh={() => void loadSnapshot()}
+            onImport={() => void importAccounts()}
+            onExport={() => void exportAccounts()}
+          />
+        ) : null}
 
-            <div className="config-grid">
-              <FieldNumber
-                label="批量数量"
-                value={registerConfig.batchSize}
-                onChange={(value) => setRegisterConfig({ ...registerConfig, batchSize: value })}
-              />
-              <FieldNumber
-                label="并发数量"
-                value={registerConfig.concurrentWorkers}
-                onChange={(value) => setRegisterConfig({ ...registerConfig, concurrentWorkers: value })}
-              />
-              <FieldNumber
-                label="重试次数"
-                value={registerConfig.maxRetries}
-                onChange={(value) => setRegisterConfig({ ...registerConfig, maxRetries: value })}
-              />
-            </div>
+        {activeView === "proxies" ? (
+          <ProxiesPage
+            proxies={snapshot.proxies}
+            busy={busy}
+            onImport={() => void importProxies()}
+            onRefresh={() => void loadSnapshot()}
+          />
+        ) : null}
 
-            <div className="switch-row">
-              <Toggle
-                label="注册后获取 Token"
-                checked={registerConfig.fetchToken}
-                onChange={(checked) => setRegisterConfig({ ...registerConfig, fetchToken: checked })}
-              />
-              <Toggle
-                label="无头模式"
-                checked={registerConfig.headless}
-                onChange={(checked) => setRegisterConfig({ ...registerConfig, headless: checked })}
-              />
-            </div>
-
-            <div className="task-log">
-              <div className="task-log-header">
-                <span>最近任务</span>
-                <strong>{currentTask ? `#${currentTask.id} · ${currentTask.task_type}` : "暂无任务"}</strong>
-              </div>
-
-              {currentTask ? (
-                <>
-                  <div className="task-stats">
-                    <span>状态 {currentTask.status}</span>
-                    <span>成功 {currentTask.success_count}</span>
-                    <span>失败 {currentTask.failure_count}</span>
-                  </div>
-                  <div className="log-list">
-                    {currentTask.recent_logs.length ? (
-                      currentTask.recent_logs.map((log) => (
-                        <div className="log-item" key={log.id ?? `${log.created_at}-${log.message}`}>
-                          <span>{log.level}</span>
-                          <p>{log.message}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="empty-state">当前任务还没有日志。</div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="empty-state">任务执行后，这里会显示最新进度和日志。</div>
-              )}
-            </div>
-          </article>
-
-          <article className="panel accounts-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">Accounts</p>
-                <h3>账号库</h3>
-              </div>
-              <input
-                className="search-input"
-                placeholder="搜索邮箱 / 分组 / 状态"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </header>
-
-            <div className="table-shell">
-              <table>
-                <thead>
-                  <tr>
-                    <th>邮箱</th>
-                    <th>状态</th>
-                    <th>Token</th>
-                    <th>分组</th>
-                    <th>来源</th>
-                    <th>校验时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAccounts.length ? (
-                    filteredAccounts.map((account) => (
-                      <tr key={account.id ?? account.email}>
-                        <td>
-                          <div className="primary-cell">
-                            <strong>{account.email}</strong>
-                            <span>{account.password}</span>
-                          </div>
-                        </td>
-                        <td>{account.status}</td>
-                        <td>{account.token_status || "未获取"}</td>
-                        <td>{account.group_name}</td>
-                        <td>{account.source}</td>
-                        <td>{account.last_login_check_at ?? "-"}</td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={6}>
-                        <div className="empty-state">没有匹配的账号记录。</div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article className="panel settings-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">Settings</p>
-                <h3>系统设置</h3>
-              </div>
-            </header>
-
-            <form className="settings-form" onSubmit={(event) => void saveSettings(event)}>
-              <FieldText
-                label="浏览器路径"
-                value={settingsDraft.browser_executable_path}
-                onChange={(value) => setSettingsDraft({ ...settingsDraft, browser_executable_path: value })}
-              />
-              <FieldText
-                label="User-Agent"
-                value={settingsDraft.user_agent}
-                onChange={(value) => setSettingsDraft({ ...settingsDraft, user_agent: value })}
-              />
-              <div className="config-grid">
-                <FieldNumber
-                  label="页面超时"
-                  value={settingsDraft.timeout_ms}
-                  onChange={(value) => setSettingsDraft({ ...settingsDraft, timeout_ms: value })}
-                />
-                <FieldNumber
-                  label="验证码等待"
-                  value={settingsDraft.captcha_wait_ms}
-                  onChange={(value) => setSettingsDraft({ ...settingsDraft, captcha_wait_ms: value })}
-                />
-                <div className="spacer" />
-              </div>
-
-              <div className="switch-row">
-                <Toggle
-                  label="模拟驱动"
-                  checked={settingsDraft.use_mock_driver}
-                  onChange={(checked) => setSettingsDraft({ ...settingsDraft, use_mock_driver: checked })}
-                />
-                <Toggle
-                  label="无头模式"
-                  checked={settingsDraft.headless}
-                  onChange={(checked) => setSettingsDraft({ ...settingsDraft, headless: checked })}
-                />
-              </div>
-
-              <FieldText
-                label="Client ID"
-                value={settingsDraft.client_id}
-                onChange={(value) => setSettingsDraft({ ...settingsDraft, client_id: value })}
-              />
-              <FieldText
-                label="Redirect URL"
-                value={settingsDraft.redirect_url}
-                onChange={(value) => setSettingsDraft({ ...settingsDraft, redirect_url: value })}
-              />
-
-              <label>
-                <span>Scopes</span>
-                <textarea
-                  rows={4}
-                  value={settingsDraft.scopes.join("\n")}
-                  onChange={(event) =>
-                    setSettingsDraft({
-                      ...settingsDraft,
-                      scopes: event.target.value
-                        .split("\n")
-                        .map((line) => line.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              </label>
-
-              <button className="solid-button" type="submit" disabled={busy}>
-                保存设置
-              </button>
-            </form>
-          </article>
-
-          <article className="panel proxy-panel">
-            <header className="panel-header">
-              <div>
-                <p className="eyebrow">Proxy Pool</p>
-                <h3>代理池</h3>
-              </div>
-            </header>
-
-            <div className="proxy-list">
-              {snapshot?.proxies.length ? (
-                snapshot.proxies.map((proxy) => (
-                  <div className="proxy-item" key={proxy.id ?? proxy.server}>
-                    <strong>{proxy.server}</strong>
-                    <span>{proxy.status}</span>
-                    <small>{proxy.last_used_at ?? "未使用"}</small>
-                  </div>
-                ))
-              ) : (
-                <div className="empty-state">当前还没有代理数据。</div>
-              )}
-            </div>
-          </article>
-        </section>
+        {activeView === "settings" ? (
+          <SettingsPage
+            settings={settingsDraft}
+            busy={busy}
+            onChange={setSettingsDraft}
+            onSave={(event) => void saveSettings(event)}
+          />
+        ) : null}
       </main>
     </div>
-  );
-}
-
-function MetricCard(props: { label: string; value: number }) {
-  return (
-    <article className="metric-card">
-      <p>{props.label}</p>
-      <strong>{props.value}</strong>
-    </article>
-  );
-}
-
-function Toggle(props: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <label className="toggle">
-      <input type="checkbox" checked={props.checked} onChange={(event) => props.onChange(event.target.checked)} />
-      <span>{props.label}</span>
-    </label>
-  );
-}
-
-function FieldNumber(props: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <label>
-      <span>{props.label}</span>
-      <input type="number" value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
-    </label>
-  );
-}
-
-function FieldText(props: { label: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <label>
-      <span>{props.label}</span>
-      <input value={props.value} onChange={(event) => props.onChange(event.target.value)} />
-    </label>
   );
 }
