@@ -24,9 +24,6 @@ export function BatchRegisterPage(props: BatchRegisterPageProps) {
   return (
     <section className="page-stack">
       <PageTitle
-        eyebrow="Registration"
-        title="批量注册"
-        description="把注册配置、当前批次、错误追踪和结果回看收敛在一个工作台里，不再分散到其他页面。"
         actions={
           <div className="inline-actions">
             <button className="ghost-button" type="button" onClick={props.onRefresh} disabled={props.busy}>
@@ -50,12 +47,7 @@ export function BatchRegisterPage(props: BatchRegisterPageProps) {
           <div className="form-grid">
             <label className="field">
               <span>批量数量</span>
-              <input
-                type="number"
-                min={1}
-                value={props.registerConfig.batchSize}
-                onChange={(event) => props.onConfigChange({ batchSize: Number(event.target.value) })}
-              />
+              <input type="number" min={1} value={props.registerConfig.batchSize} onChange={(event) => props.onConfigChange({ batchSize: Number(event.target.value) })} />
             </label>
             <label className="field">
               <span>并发数</span>
@@ -68,32 +60,16 @@ export function BatchRegisterPage(props: BatchRegisterPageProps) {
             </label>
             <label className="field">
               <span>失败重试</span>
-              <input
-                type="number"
-                min={0}
-                value={props.registerConfig.maxRetries}
-                onChange={(event) => props.onConfigChange({ maxRetries: Number(event.target.value) })}
-              />
+              <input type="number" min={0} value={props.registerConfig.maxRetries} onChange={(event) => props.onConfigChange({ maxRetries: Number(event.target.value) })} />
             </label>
             <label className="field toggle-field">
               <span>注册后获取 Token</span>
-              <input
-                type="checkbox"
-                checked={props.registerConfig.fetchToken}
-                onChange={(event) => props.onConfigChange({ fetchToken: event.target.checked })}
-              />
+              <input type="checkbox" checked={props.registerConfig.fetchToken} onChange={(event) => props.onConfigChange({ fetchToken: event.target.checked })} />
             </label>
             <label className="field toggle-field">
               <span>无头模式</span>
-              <input
-                type="checkbox"
-                checked={props.registerConfig.headless}
-                onChange={(event) => props.onConfigChange({ headless: event.target.checked })}
-              />
+              <input type="checkbox" checked={props.registerConfig.headless} onChange={(event) => props.onConfigChange({ headless: event.target.checked })} />
             </label>
-          </div>
-          <div className="helper-block">
-            <p>注册成功仍以“注册完成后立即登录校验通过并正式入库”为准。</p>
           </div>
         </article>
 
@@ -183,7 +159,7 @@ export function BatchRegisterPage(props: BatchRegisterPageProps) {
             </div>
           </div>
         ) : (
-          <div className="empty-state">选择一个批次后，这里会展示更完整的配置和日志。</div>
+          <div className="empty-state">选择一个批次后，这里会显示更完整的配置和日志。</div>
         )}
       </section>
     </section>

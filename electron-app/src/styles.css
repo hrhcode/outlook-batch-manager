@@ -88,9 +88,10 @@ tr,
 }
 
 .shell {
-  min-height: 100vh;
+  height: 100vh;
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .shell.loading {
@@ -109,6 +110,10 @@ tr,
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow: auto;
 }
 
 .brand,
@@ -197,6 +202,8 @@ tr,
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow: auto;
 }
 
 .topbar {
@@ -331,6 +338,11 @@ tr,
 .page-title h2 {
   font-size: 22px;
   letter-spacing: -0.04em;
+}
+
+.subtle-text {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .page-description {
@@ -620,10 +632,33 @@ input[type="checkbox"] {
   color: var(--success);
 }
 
+.status-authorized,
+.status-sent {
+  color: var(--success);
+}
+
 .status-login_failed,
 .status-failed,
 .status-unhealthy {
   color: var(--danger);
+}
+
+.status-action_required,
+.status-reauth_required,
+.status-expired {
+  color: #d6b15d;
+}
+
+.status-polling,
+.status-pending,
+.status-degraded {
+  color: #d6b15d;
+}
+
+.status-not_configured,
+.status-disconnected,
+.status-not_authorized {
+  color: var(--muted);
 }
 
 .simple-list-item,

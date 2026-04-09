@@ -1,33 +1,32 @@
 /// <reference types="vite/client" />
 
-import type {
-  AppSettings,
-  AppSnapshot,
-  ConnectivityResult,
-  CreateAccountPayload,
-  ExportResult,
-  ImportResult,
-  MailListResult,
-  MailQueryPayload,
-  RunTaskPayload,
-} from "./types";
+import type { AppSettings, AppSnapshot, MailListResult } from "./types";
 
 interface DesktopApi {
   getSnapshot: () => Promise<AppSnapshot>;
-  runTask: (payload: RunTaskPayload) => Promise<{ task_id: number }>;
   saveSettings: (payload: AppSettings) => Promise<{ saved: boolean }>;
-  importAccounts: () => Promise<ImportResult | { cancelled: true }>;
-  exportAccounts: (payload: { keyword?: string; status?: string }) => Promise<ExportResult | { cancelled: true }>;
-  importProxies: () => Promise<ImportResult | { cancelled: true }>;
-  createAccount: (payload: CreateAccountPayload) => Promise<{ created: boolean; account: unknown }>;
-  testAccount: (accountId: number) => Promise<ConnectivityResult>;
-  syncMail: (payload: {
+  runLegacyTask: (payload: {
+    taskType: "register" | "login_check";
+    batchSize?: number;
+    concurrentWorkers?: number;
+    maxRetries?: number;
+    fetchToken?: boolean;
+    headless?: boolean;
     accountId?: number;
-    source?: string;
-    limit?: number;
+  }) => Promise<{ task_id: number }>;
+  authorizeAccount: (payload: { accountId: number }) => Promise<{ email_address: string; account_id: number }>;
+  testAccountMailCapability: (accountId: number) => Promise<{ message: string; success: boolean }>;
+  deleteAccounts: (payload: { accountIds: number[] }) => Promise<{ deleted: number }>;
+  syncMailBatch: (payload: { accountIds: number[]; limit?: number }) => Promise<{ success: number; failed: number }>;
+  listMail: (payload: {
+    accountId?: number;
+    keyword?: string;
     unreadOnly?: boolean;
-  }) => Promise<{ task_id: number; latest_run: unknown }>;
-  listMail: (payload: MailQueryPayload) => Promise<MailListResult>;
+    source?: string;
+  }) => Promise<MailListResult>;
+  updateAccountAuth: (payload: { accountId: number; clientId?: string; refreshToken?: string }) => Promise<{ updated: boolean; account_id: number }>;
+  importAccounts: () => Promise<{ imported: number; path: string } | { cancelled: true }>;
+  importProxies: () => Promise<{ imported: number; path: string } | { cancelled: true }>;
   getMeta: () => Promise<{ projectRoot: string; pythonExecutable: string }>;
 }
 
