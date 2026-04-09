@@ -1,0 +1,2 @@
+"""Outlook Batch Manager."""
+
