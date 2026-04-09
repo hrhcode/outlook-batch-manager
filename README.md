@@ -1,28 +1,30 @@
 # Outlook Batch Manager
 
-Outlook / Hotmail 账号批量注册、登录校验、Token 管理与账号库整理的 Windows 桌面工具。
+Outlook / Hotmail account registration, login verification, token management, and account library tooling.
 
-## 当前阶段
+## Architecture
 
-- `Python + PySide6` 桌面应用
-- `SQLite` 本地数据存储
-- `Playwright` 自动化驱动抽象
-- 任务中心支持批量注册、登录校验、Token 刷新
-- 账号库支持 CSV / Excel 导入导出
+- `Electron + React`: the only frontend
+- `Python`: local backend, automation runner, SQLite data layer, and CLI bridge
+- `.example/`: read-only reference code, excluded from git
 
-## 快速开始
+## Setup
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e .[dev]
-playwright install chromium
-python main.py
+.\.venv\Scripts\python.exe -m pip install -e .[dev]
+cd .\electron-app
+npm install
 ```
 
-## 目录结构
+## Run
 
-- `src/outlook_batch_manager/` 应用源码
-- `tests/` 测试
-- `.example/` 参考项目，只读，不纳入版本管理
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
 
+## Layout
+
+- `src/outlook_batch_manager/` Python backend
+- `electron-app/` Electron + React frontend
+- `tests/` Python tests

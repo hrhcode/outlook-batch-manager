@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { AppSettings, AppSnapshot, RunTaskPayload, TaskItem } from "./types";
 
+type ThemeMode = "dark" | "light";
+
 const emptySettings: AppSettings = {
   browser_channel: "chromium",
   browser_executable_path: "",
@@ -22,6 +24,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [query, setQuery] = useState("");
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(emptySettings);
   const [registerConfig, setRegisterConfig] = useState({
     batchSize: 5,
@@ -30,6 +33,18 @@ export default function App() {
     fetchToken: true,
     headless: false,
   });
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem("obm-theme");
+    const nextTheme: ThemeMode = stored === "light" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("obm-theme", theme);
+  }, [theme]);
 
   async function loadSnapshot() {
     try {
@@ -59,6 +74,7 @@ export default function App() {
   async function runTask(payload: RunTaskPayload, successText: string) {
     setBusy(true);
     setNotice("");
+    setError("");
     try {
       await window.desktopApi.runTask(payload);
       await loadSnapshot();
@@ -74,6 +90,7 @@ export default function App() {
     event.preventDefault();
     setBusy(true);
     setNotice("");
+    setError("");
     try {
       await window.desktopApi.saveSettings(settingsDraft);
       await loadSnapshot();
@@ -85,11 +102,15 @@ export default function App() {
     }
   }
 
-  const filteredAccounts = snapshot?.accounts.filter((account) => {
-    if (!query.trim()) return true;
-    const term = query.toLowerCase();
-    return [account.email, account.group_name, account.notes, account.status].join(" ").toLowerCase().includes(term);
-  }) ?? [];
+  const filteredAccounts =
+    snapshot?.accounts.filter((account) => {
+      if (!query.trim()) return true;
+      const term = query.toLowerCase();
+      return [account.email, account.group_name, account.notes, account.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    }) ?? [];
 
   const currentTask: TaskItem | undefined = snapshot?.tasks[0];
 
@@ -103,7 +124,7 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark" />
           <div>
-            <p className="eyebrow">Electron Shell</p>
+            <p className="eyebrow">Electron Frontend</p>
             <h1>Outlook Batch Manager</h1>
           </div>
         </div>
@@ -117,7 +138,7 @@ export default function App() {
           <strong>{meta?.pythonExecutable}</strong>
         </div>
         <div className="meta-card">
-          <p>刷新时间</p>
+          <p>最近刷新</p>
           <strong>{snapshot?.generated_at ?? "-"}</strong>
         </div>
       </aside>
@@ -125,18 +146,37 @@ export default function App() {
       <main className="content">
         <section className="hero">
           <div>
-            <p className="eyebrow">Minimal black / white workspace</p>
-            <h2>清晰、优雅、可直接操作真实数据的桌面前端壳</h2>
+            <p className="eyebrow">Minimal monochrome workspace</p>
+            <h2>只保留一套前端，界面更安静，信息更清晰。</h2>
           </div>
-          <button className="ghost-button" onClick={() => void loadSnapshot()} disabled={busy}>
-            刷新视图
-          </button>
+
+          <div className="hero-actions">
+            <div className="theme-switch" role="tablist" aria-label="主题切换">
+              <button
+                type="button"
+                className={theme === "dark" ? "theme-button active" : "theme-button"}
+                onClick={() => setTheme("dark")}
+              >
+                Dark
+              </button>
+              <button
+                type="button"
+                className={theme === "light" ? "theme-button active" : "theme-button"}
+                onClick={() => setTheme("light")}
+              >
+                Light
+              </button>
+            </div>
+            <button className="ghost-button" onClick={() => void loadSnapshot()} disabled={busy}>
+              刷新视图
+            </button>
+          </div>
         </section>
 
         <section className="summary-grid">
           <MetricCard label="账号总数" value={snapshot?.summary.account_count ?? 0} />
           <MetricCard label="代理池" value={snapshot?.summary.proxy_count ?? 0} />
-          <MetricCard label="任务数" value={snapshot?.summary.task_count ?? 0} />
+          <MetricCard label="任务总数" value={snapshot?.summary.task_count ?? 0} />
         </section>
 
         {(error || notice) && (
@@ -175,23 +215,51 @@ export default function App() {
               >
                 启动批量注册
               </button>
-              <button className="ghost-button" disabled={busy} onClick={() => void runTask({ taskType: "login_check" }, "登录校验任务已提交")}>
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => void runTask({ taskType: "login_check" }, "登录校验任务已提交")}
+              >
                 登录校验
               </button>
-              <button className="ghost-button" disabled={busy} onClick={() => void runTask({ taskType: "token_refresh" }, "Token 刷新任务已提交")}>
+              <button
+                className="ghost-button"
+                disabled={busy}
+                onClick={() => void runTask({ taskType: "token_refresh" }, "Token 刷新任务已提交")}
+              >
                 Token 刷新
               </button>
             </div>
 
             <div className="config-grid">
-              <FieldNumber label="批量数量" value={registerConfig.batchSize} onChange={(value) => setRegisterConfig({ ...registerConfig, batchSize: value })} />
-              <FieldNumber label="并发数" value={registerConfig.concurrentWorkers} onChange={(value) => setRegisterConfig({ ...registerConfig, concurrentWorkers: value })} />
-              <FieldNumber label="重试次数" value={registerConfig.maxRetries} onChange={(value) => setRegisterConfig({ ...registerConfig, maxRetries: value })} />
+              <FieldNumber
+                label="批量数量"
+                value={registerConfig.batchSize}
+                onChange={(value) => setRegisterConfig({ ...registerConfig, batchSize: value })}
+              />
+              <FieldNumber
+                label="并发数量"
+                value={registerConfig.concurrentWorkers}
+                onChange={(value) => setRegisterConfig({ ...registerConfig, concurrentWorkers: value })}
+              />
+              <FieldNumber
+                label="重试次数"
+                value={registerConfig.maxRetries}
+                onChange={(value) => setRegisterConfig({ ...registerConfig, maxRetries: value })}
+              />
             </div>
 
             <div className="switch-row">
-              <Toggle label="注册后获取 Token" checked={registerConfig.fetchToken} onChange={(checked) => setRegisterConfig({ ...registerConfig, fetchToken: checked })} />
-              <Toggle label="无头模式" checked={registerConfig.headless} onChange={(checked) => setRegisterConfig({ ...registerConfig, headless: checked })} />
+              <Toggle
+                label="注册后获取 Token"
+                checked={registerConfig.fetchToken}
+                onChange={(checked) => setRegisterConfig({ ...registerConfig, fetchToken: checked })}
+              />
+              <Toggle
+                label="无头模式"
+                checked={registerConfig.headless}
+                onChange={(checked) => setRegisterConfig({ ...registerConfig, headless: checked })}
+              />
             </div>
 
             <div className="task-log">
@@ -199,6 +267,7 @@ export default function App() {
                 <span>最近任务</span>
                 <strong>{currentTask ? `#${currentTask.id} · ${currentTask.task_type}` : "暂无任务"}</strong>
               </div>
+
               {currentTask ? (
                 <>
                   <div className="task-stats">
@@ -231,8 +300,14 @@ export default function App() {
                 <p className="eyebrow">Accounts</p>
                 <h3>账号库</h3>
               </div>
-              <input className="search-input" placeholder="搜索邮箱 / 分组 / 状态" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input
+                className="search-input"
+                placeholder="搜索邮箱 / 分组 / 状态"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
             </header>
+
             <div className="table-shell">
               <table>
                 <thead>
@@ -264,7 +339,9 @@ export default function App() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6}><div className="empty-state">没有匹配的账号记录。</div></td>
+                      <td colSpan={6}>
+                        <div className="empty-state">没有匹配的账号记录。</div>
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -281,28 +358,74 @@ export default function App() {
             </header>
 
             <form className="settings-form" onSubmit={(event) => void saveSettings(event)}>
-              <FieldText label="浏览器路径" value={settingsDraft.browser_executable_path} onChange={(value) => setSettingsDraft({ ...settingsDraft, browser_executable_path: value })} />
-              <FieldText label="User-Agent" value={settingsDraft.user_agent} onChange={(value) => setSettingsDraft({ ...settingsDraft, user_agent: value })} />
+              <FieldText
+                label="浏览器路径"
+                value={settingsDraft.browser_executable_path}
+                onChange={(value) => setSettingsDraft({ ...settingsDraft, browser_executable_path: value })}
+              />
+              <FieldText
+                label="User-Agent"
+                value={settingsDraft.user_agent}
+                onChange={(value) => setSettingsDraft({ ...settingsDraft, user_agent: value })}
+              />
               <div className="config-grid">
-                <FieldNumber label="页面超时" value={settingsDraft.timeout_ms} onChange={(value) => setSettingsDraft({ ...settingsDraft, timeout_ms: value })} />
-                <FieldNumber label="验证码等待" value={settingsDraft.captcha_wait_ms} onChange={(value) => setSettingsDraft({ ...settingsDraft, captcha_wait_ms: value })} />
-                <div />
+                <FieldNumber
+                  label="页面超时"
+                  value={settingsDraft.timeout_ms}
+                  onChange={(value) => setSettingsDraft({ ...settingsDraft, timeout_ms: value })}
+                />
+                <FieldNumber
+                  label="验证码等待"
+                  value={settingsDraft.captcha_wait_ms}
+                  onChange={(value) => setSettingsDraft({ ...settingsDraft, captcha_wait_ms: value })}
+                />
+                <div className="spacer" />
               </div>
+
               <div className="switch-row">
-                <Toggle label="模拟驱动" checked={settingsDraft.use_mock_driver} onChange={(checked) => setSettingsDraft({ ...settingsDraft, use_mock_driver: checked })} />
-                <Toggle label="无头模式" checked={settingsDraft.headless} onChange={(checked) => setSettingsDraft({ ...settingsDraft, headless: checked })} />
+                <Toggle
+                  label="模拟驱动"
+                  checked={settingsDraft.use_mock_driver}
+                  onChange={(checked) => setSettingsDraft({ ...settingsDraft, use_mock_driver: checked })}
+                />
+                <Toggle
+                  label="无头模式"
+                  checked={settingsDraft.headless}
+                  onChange={(checked) => setSettingsDraft({ ...settingsDraft, headless: checked })}
+                />
               </div>
-              <FieldText label="Client ID" value={settingsDraft.client_id} onChange={(value) => setSettingsDraft({ ...settingsDraft, client_id: value })} />
-              <FieldText label="Redirect URL" value={settingsDraft.redirect_url} onChange={(value) => setSettingsDraft({ ...settingsDraft, redirect_url: value })} />
+
+              <FieldText
+                label="Client ID"
+                value={settingsDraft.client_id}
+                onChange={(value) => setSettingsDraft({ ...settingsDraft, client_id: value })}
+              />
+              <FieldText
+                label="Redirect URL"
+                value={settingsDraft.redirect_url}
+                onChange={(value) => setSettingsDraft({ ...settingsDraft, redirect_url: value })}
+              />
+
               <label>
                 <span>Scopes</span>
                 <textarea
                   rows={4}
                   value={settingsDraft.scopes.join("\n")}
-                  onChange={(event) => setSettingsDraft({ ...settingsDraft, scopes: event.target.value.split("\n").map((line) => line.trim()).filter(Boolean) })}
+                  onChange={(event) =>
+                    setSettingsDraft({
+                      ...settingsDraft,
+                      scopes: event.target.value
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter(Boolean),
+                    })
+                  }
                 />
               </label>
-              <button className="solid-button" type="submit" disabled={busy}>保存设置</button>
+
+              <button className="solid-button" type="submit" disabled={busy}>
+                保存设置
+              </button>
             </form>
           </article>
 
@@ -313,6 +436,7 @@ export default function App() {
                 <h3>代理池</h3>
               </div>
             </header>
+
             <div className="proxy-list">
               {snapshot?.proxies.length ? (
                 snapshot.proxies.map((proxy) => (

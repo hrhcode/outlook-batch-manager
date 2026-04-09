@@ -2,6 +2,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $projectRoot
+Set-Location (Join-Path $projectRoot "electron-app")
 
-& ".\.venv\Scripts\python.exe" ".\main.py"
+& "npm.cmd" run dev
