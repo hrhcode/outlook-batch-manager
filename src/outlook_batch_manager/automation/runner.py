@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import random
@@ -389,9 +389,9 @@ class TaskRunner:
                 timeout_ms=int(settings.get("timeout_ms", 30000)),
                 captcha_wait_ms=int(settings.get("captcha_wait_ms", 12000)),
                 user_agent=settings.get("user_agent", ""),
-                client_id=client_id_override or settings.get("client_id", ""),
-                redirect_url=settings.get("redirect_url", ""),
-                scopes=settings.get("scopes", []),
+                client_id=client_id_override or settings.get("oauth", {}).get("client_id", ""),
+                redirect_url=settings.get("oauth", {}).get("redirect_uri", ""),
+                scopes=settings.get("oauth", {}).get("scopes", []),
             )
         )
 

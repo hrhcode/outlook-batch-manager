@@ -66,3 +66,19 @@ def test_import_text_formats_store_refresh_token_and_provider(tmp_path: Path) ->
     assert token is not None
     assert token.refresh_token == "refresh-456"
     assert token.status == TokenStatus.STORED
+
+
+def test_delete_accounts_removes_account_and_token(tmp_path: Path) -> None:
+    service = AccountService(Database(tmp_path / "app.db"))
+    account = service.create_account(
+        email="delete@example.com",
+        password="Password123!",
+        client_id_override="client-1",
+        refresh_token="refresh-1",
+    )
+
+    deleted = service.delete_accounts([account.id or 0])
+
+    assert deleted == 1
+    assert service.get_account(account.id or 0) is None
+    assert service.get_token(account.id or 0) is None

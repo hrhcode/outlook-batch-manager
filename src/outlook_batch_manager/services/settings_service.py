@@ -16,27 +16,25 @@ class SettingsService:
             "timeout_ms": 30000,
             "captcha_wait_ms": 12000,
             "user_agent": "",
-            "use_mock_driver": True,
-            "client_id": "",
-            "redirect_url": "",
-            "scopes": [],
-            "mail_sync": {
-                "default_source": "auto",
-                "batch_limit": 20,
-                "unread_only": False,
-                "graph_fallback_to_imap": True,
+            "use_mock_driver": False,
+            "mock_mode": False,
+            "oauth": {
+                "client_id": "",
+                "redirect_uri": "http://127.0.0.1:8787/oauth/callback",
+                "scopes": [
+                    "offline_access",
+                    "https://outlook.office.com/IMAP.AccessAsUser.All",
+                ],
+            },
+            "mail": {
+                "sync_batch_size": 20,
+                "poll_interval_minutes": 1,
             },
             "mail_protocols": {
                 "imap": {
-                    "enabled": False,
+                    "enabled": True,
                     "host": "outlook.office365.com",
                     "port": 993,
-                    "use_ssl": True,
-                },
-                "pop": {
-                    "enabled": False,
-                    "host": "outlook.office365.com",
-                    "port": 995,
                     "use_ssl": True,
                 },
             },
@@ -47,10 +45,28 @@ class SettingsService:
 
     def load(self) -> dict[str, Any]:
         raw = json.loads(self.path.read_text(encoding="utf-8"))
-        return self._deep_merge(deepcopy(self.defaults), raw)
+        merged = self._deep_merge(deepcopy(self.defaults), raw)
+        merged["mock_mode"] = bool(raw.get("mock_mode", merged.get("mock_mode", False)) or raw.get("use_mock_driver", merged.get("use_mock_driver", False)))
+        merged["use_mock_driver"] = merged["mock_mode"]
+        if "client_id" in merged and merged["client_id"]:
+            merged["oauth"]["client_id"] = merged["client_id"]
+        if "redirect_url" in merged and merged["redirect_url"]:
+            merged["oauth"]["redirect_uri"] = merged["redirect_url"]
+        if "scopes" in merged and merged["scopes"]:
+            merged["oauth"]["scopes"] = merged["scopes"]
+        merged["mail"]["poll_interval_minutes"] = max(1, int(merged["mail"].get("poll_interval_minutes", 1)))
+        merged["mail"]["sync_batch_size"] = max(1, int(merged["mail"].get("sync_batch_size", 20)))
+        return merged
 
     def save(self, settings: dict[str, Any]) -> None:
         payload = self._deep_merge(deepcopy(self.defaults), settings)
+        payload["mock_mode"] = bool(settings.get("mock_mode", payload.get("mock_mode", False)) or settings.get("use_mock_driver", payload.get("use_mock_driver", False)))
+        payload["use_mock_driver"] = payload["mock_mode"]
+        payload["mail"]["poll_interval_minutes"] = max(1, int(payload["mail"].get("poll_interval_minutes", 1)))
+        payload["mail"]["sync_batch_size"] = max(1, int(payload["mail"].get("sync_batch_size", 20)))
+        payload["client_id"] = payload["oauth"]["client_id"]
+        payload["redirect_url"] = payload["oauth"]["redirect_uri"]
+        payload["scopes"] = payload["oauth"]["scopes"]
         self.path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _deep_merge(self, base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

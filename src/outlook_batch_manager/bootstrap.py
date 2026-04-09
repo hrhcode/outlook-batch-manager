@@ -29,4 +29,10 @@ def bootstrap_services(project_root: Path) -> ServiceContainer:
     mail = MailService(database, accounts, settings)
     proxies = ProxyService(database)
     tasks = TaskService(database, accounts, mail, proxies, settings)
-    return ServiceContainer(settings=settings, accounts=accounts, mail=mail, proxies=proxies, tasks=tasks)
+    return ServiceContainer(
+        settings=settings,
+        accounts=accounts,
+        mail=mail,
+        proxies=proxies,
+        tasks=tasks,
+    )

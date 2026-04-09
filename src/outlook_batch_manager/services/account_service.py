@@ -13,6 +13,7 @@ from outlook_batch_manager.models import (
     AccountStatus,
     AccountSummary,
     ConnectivityStatus,
+    MailCapabilityStatus,
     MailProvider,
     TokenRecord,
     TokenStatus,
@@ -47,7 +48,8 @@ class AccountService:
             SELECT
                 accounts.*,
                 tokens.status AS token_status,
-                tokens.expires_at AS token_expires_at
+                tokens.expires_at AS token_expires_at,
+                tokens.refresh_token AS refresh_token
             FROM accounts
             LEFT JOIN tokens ON tokens.account_id = accounts.id
         """
@@ -70,6 +72,8 @@ class AccountService:
                 account=self._row_to_account(row),
                 token_status=row["token_status"] or "",
                 token_expires_at=datetime.fromisoformat(row["token_expires_at"]) if row["token_expires_at"] else None,
+                has_refresh_token=bool((row["refresh_token"] or "").strip()),
+                has_client_id=bool((row["client_id_override"] or "").strip()),
             )
             for row in rows
         ]
@@ -77,6 +81,11 @@ class AccountService:
     def get_account(self, account_id: int) -> Account | None:
         with self.database.connect() as connection:
             row = connection.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        return self._row_to_account(row) if row else None
+
+    def get_account_by_email(self, email: str) -> Account | None:
+        with self.database.connect() as connection:
+            row = connection.execute("SELECT * FROM accounts WHERE email = ?", (email.strip(),)).fetchone()
         return self._row_to_account(row) if row else None
 
     def get_token(self, account_id: int) -> TokenRecord | None:
@@ -118,7 +127,8 @@ class AccountService:
             mail_provider=self._normalize_provider(provider, email),
             client_id_override=client_id_override.strip(),
             import_format="manual_form",
-            connectivity_status=ConnectivityStatus.UNKNOWN,
+            connectivity_status=ConnectivityStatus.CONNECTABLE if client_id_override.strip() and refresh_token.strip() else ConnectivityStatus.ACTION_REQUIRED,
+            mail_capability_status=MailCapabilityStatus.NOT_READY,
         )
         saved = self.upsert_account(account)
         if refresh_token and saved.id is not None:
@@ -133,11 +143,8 @@ class AccountService:
 
     def upsert_account(self, account: Account) -> Account:
         now = account.created_at.isoformat(timespec="seconds") if account.created_at else self.database.now_iso()
-        last_login = (
-            account.last_login_check_at.isoformat(timespec="seconds")
-            if account.last_login_check_at
-            else None
-        )
+        last_login = account.last_login_check_at.isoformat(timespec="seconds") if account.last_login_check_at else None
+        last_mail_sync = account.last_mail_sync_at.isoformat(timespec="seconds") if account.last_mail_sync_at else None
         with self.database.connect() as connection:
             existing = connection.execute(
                 "SELECT id, created_at FROM accounts WHERE email = ?",
@@ -149,7 +156,8 @@ class AccountService:
                     UPDATE accounts
                     SET password = ?, status = ?, source = ?, group_name = ?, notes = ?,
                         recovery_email = ?, mail_provider = ?, client_id_override = ?,
-                        import_format = ?, connectivity_status = ?, last_login_check_at = ?
+                        import_format = ?, connectivity_status = ?, mail_capability_status = ?,
+                        last_login_check_at = ?, last_mail_sync_at = ?, last_error = ?
                     WHERE email = ?
                     """,
                     (
@@ -163,7 +171,10 @@ class AccountService:
                         account.client_id_override,
                         account.import_format,
                         account.connectivity_status,
+                        account.mail_capability_status,
                         last_login,
+                        last_mail_sync,
+                        account.last_error,
                         account.email,
                     ),
                 )
@@ -174,9 +185,9 @@ class AccountService:
                     """
                     INSERT INTO accounts (
                         email, password, status, source, group_name, notes, recovery_email,
-                        mail_provider, client_id_override, import_format, connectivity_status,
-                        created_at, last_login_check_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        mail_provider, client_id_override, import_format, connectivity_status, mail_capability_status,
+                        created_at, last_login_check_at, last_mail_sync_at, last_error
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         account.email,
@@ -190,8 +201,11 @@ class AccountService:
                         account.client_id_override,
                         account.import_format,
                         account.connectivity_status,
+                        account.mail_capability_status,
                         now,
                         last_login,
+                        last_mail_sync,
+                        account.last_error,
                     ),
                 )
                 account.id = int(cursor.lastrowid)
@@ -241,6 +255,43 @@ class AccountService:
                 token.id = int(cursor.lastrowid)
         return token
 
+    def update_account_runtime(
+        self,
+        account_id: int,
+        *,
+        connectivity_status: ConnectivityStatus | None = None,
+        mail_capability_status: MailCapabilityStatus | None = None,
+        last_login_check_at: datetime | None = None,
+        last_mail_sync_at: datetime | None = None,
+        last_error: str | None = None,
+    ) -> Account | None:
+        account = self.get_account(account_id)
+        if account is None:
+            return None
+        if connectivity_status is not None:
+            account.connectivity_status = connectivity_status
+        if mail_capability_status is not None:
+            account.mail_capability_status = mail_capability_status
+        if last_login_check_at is not None:
+            account.last_login_check_at = last_login_check_at
+        if last_mail_sync_at is not None:
+            account.last_mail_sync_at = last_mail_sync_at
+        if last_error is not None:
+            account.last_error = last_error
+        return self.upsert_account(account)
+
+    def delete_accounts(self, account_ids: list[int]) -> int:
+        normalized = [int(item) for item in account_ids if item is not None]
+        if not normalized:
+            return 0
+        placeholders = ",".join("?" for _ in normalized)
+        with self.database.connect() as connection:
+            connection.execute(f"DELETE FROM tokens WHERE account_id IN ({placeholders})", tuple(normalized))
+            connection.execute(f"DELETE FROM messages WHERE account_id IN ({placeholders})", tuple(normalized))
+            connection.execute(f"DELETE FROM mail_sync_runs WHERE account_id IN ({placeholders})", tuple(normalized))
+            connection.execute(f"DELETE FROM accounts WHERE id IN ({placeholders})", tuple(normalized))
+        return len(normalized)
+
     def export_accounts(self, destination: Path, accounts: Iterable[Account]) -> None:
         rows = [self._account_to_export_row(account) for account in accounts]
         if destination.suffix.lower() == ".csv":
@@ -289,6 +340,11 @@ class AccountService:
             password = row.get("password", "").strip()
             if not email or not password:
                 continue
+            refresh_token = row.get("refresh_token", "").strip()
+            client_id_override = row.get("client_id_override", "").strip()
+            connectivity = self._parse_connectivity_status(row.get("connectivity_status", ""))
+            if connectivity == ConnectivityStatus.UNKNOWN:
+                connectivity = ConnectivityStatus.CONNECTABLE if client_id_override and refresh_token else ConnectivityStatus.ACTION_REQUIRED
             account = Account(
                 email=email,
                 password=password,
@@ -298,12 +354,12 @@ class AccountService:
                 notes=row.get("notes", "").strip(),
                 recovery_email=row.get("recovery_email", "").strip(),
                 mail_provider=self._normalize_provider(row.get("mail_provider", ""), email),
-                client_id_override=row.get("client_id_override", "").strip(),
+                client_id_override=client_id_override,
                 import_format=row.get("import_format", "table").strip() or "table",
-                connectivity_status=self._parse_connectivity_status(row.get("connectivity_status", "")),
+                connectivity_status=connectivity,
+                mail_capability_status=MailCapabilityStatus.NOT_READY,
             )
             saved = self.upsert_account(account)
-            refresh_token = row.get("refresh_token", "").strip()
             if refresh_token and saved.id is not None:
                 self.save_token(
                     TokenRecord(
@@ -360,7 +416,8 @@ class AccountService:
             mail_provider=self._normalize_provider("", email),
             client_id_override=client_id_override,
             import_format="token_line" if refresh_token else "pair_line",
-            connectivity_status=ConnectivityStatus.UNKNOWN,
+            connectivity_status=ConnectivityStatus.CONNECTABLE if client_id_override and refresh_token else ConnectivityStatus.ACTION_REQUIRED,
+            mail_capability_status=MailCapabilityStatus.NOT_READY,
         )
         return account, refresh_token
 
@@ -378,8 +435,11 @@ class AccountService:
             "client_id_override",
             "import_format",
             "connectivity_status",
+            "mail_capability_status",
             "created_at",
             "last_login_check_at",
+            "last_mail_sync_at",
+            "last_error",
             "refresh_token",
         ]
 
@@ -397,8 +457,11 @@ class AccountService:
             "client_id_override": account.client_id_override,
             "import_format": account.import_format,
             "connectivity_status": account.connectivity_status,
+            "mail_capability_status": account.mail_capability_status,
             "created_at": account.created_at.isoformat(timespec="seconds") if account.created_at else "",
             "last_login_check_at": account.last_login_check_at.isoformat(timespec="seconds") if account.last_login_check_at else "",
+            "last_mail_sync_at": account.last_mail_sync_at.isoformat(timespec="seconds") if account.last_mail_sync_at else "",
+            "last_error": account.last_error,
             "refresh_token": token.refresh_token if token else "",
         }
 
@@ -416,8 +479,11 @@ class AccountService:
             client_id_override=row["client_id_override"] or "",
             import_format=row["import_format"] or "manual",
             connectivity_status=ConnectivityStatus(row["connectivity_status"] or ConnectivityStatus.UNKNOWN),
+            mail_capability_status=MailCapabilityStatus(row["mail_capability_status"] or MailCapabilityStatus.NOT_READY),
             created_at=datetime.fromisoformat(row["created_at"]),
             last_login_check_at=datetime.fromisoformat(row["last_login_check_at"]) if row["last_login_check_at"] else None,
+            last_mail_sync_at=datetime.fromisoformat(row["last_mail_sync_at"]) if row["last_mail_sync_at"] else None,
+            last_error=row["last_error"] or "",
         )
 
     def _normalize_provider(self, provider: str, email: str) -> MailProvider:

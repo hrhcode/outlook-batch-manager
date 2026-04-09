@@ -33,6 +33,24 @@ class Database:
                 """
                 PRAGMA journal_mode=WAL;
 
+                DROP INDEX IF EXISTS idx_connection_messages_received;
+                DROP INDEX IF EXISTS idx_connection_sync_runs_started;
+                DROP INDEX IF EXISTS idx_mail_events_connection_created;
+                DROP INDEX IF EXISTS idx_retry_queue_status_available;
+
+                DROP TABLE IF EXISTS mail_connections;
+                DROP TABLE IF EXISTS connection_tokens;
+                DROP TABLE IF EXISTS oauth_sessions;
+                DROP TABLE IF EXISTS connection_diagnostics;
+                DROP TABLE IF EXISTS connection_mail_sync_runs;
+                DROP TABLE IF EXISTS connection_messages;
+                DROP TABLE IF EXISTS mail_events;
+                DROP TABLE IF EXISTS retry_queue;
+                DROP TABLE IF EXISTS outbound_messages;
+                DROP TABLE IF EXISTS legacy_accounts_backup;
+                DROP TABLE IF EXISTS legacy_tokens_backup;
+                DROP TABLE IF EXISTS legacy_messages_backup;
+
                 CREATE TABLE IF NOT EXISTS accounts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     email TEXT NOT NULL UNIQUE,
@@ -46,8 +64,11 @@ class Database:
                     client_id_override TEXT NOT NULL DEFAULT '',
                     import_format TEXT NOT NULL DEFAULT 'manual',
                     connectivity_status TEXT NOT NULL DEFAULT 'unknown',
+                    mail_capability_status TEXT NOT NULL DEFAULT 'not_ready',
                     created_at TEXT NOT NULL,
-                    last_login_check_at TEXT
+                    last_login_check_at TEXT,
+                    last_mail_sync_at TEXT,
+                    last_error TEXT NOT NULL DEFAULT ''
                 );
 
                 CREATE TABLE IF NOT EXISTS tokens (
@@ -133,12 +154,12 @@ class Database:
             self._ensure_column(connection, "accounts", "client_id_override", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "accounts", "import_format", "TEXT NOT NULL DEFAULT 'manual'")
             self._ensure_column(connection, "accounts", "connectivity_status", "TEXT NOT NULL DEFAULT 'unknown'")
+            self._ensure_column(connection, "accounts", "mail_capability_status", "TEXT NOT NULL DEFAULT 'not_ready'")
+            self._ensure_column(connection, "accounts", "last_mail_sync_at", "TEXT")
+            self._ensure_column(connection, "accounts", "last_error", "TEXT NOT NULL DEFAULT ''")
 
     def _ensure_column(self, connection: sqlite3.Connection, table_name: str, column_name: str, spec: str) -> None:
-        existing = {
-            row["name"]
-            for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
-        }
+        existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()}
         if column_name in existing:
             return
         connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {spec}")

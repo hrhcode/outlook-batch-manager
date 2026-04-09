@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from outlook_batch_manager.bootstrap import bootstrap_services
-from outlook_batch_manager.models import Account, AccountStatus
+from outlook_batch_manager.models import Account, AccountStatus, ConnectivityStatus, MailCapabilityStatus
 
 
 def run_cli(*args: str) -> dict:
@@ -94,7 +94,7 @@ def test_import_proxies_cli_imports_text_file(tmp_path: Path) -> None:
     assert snapshot["summary"]["proxy_count"] == 2
 
 
-def test_create_account_and_test_account_cli(tmp_path: Path) -> None:
+def test_create_account_and_test_account_mail_capability_cli(tmp_path: Path) -> None:
     created = run_cli(
         "create-account",
         "--root",
@@ -107,9 +107,9 @@ def test_create_account_and_test_account_cli(tmp_path: Path) -> None:
         "outlook",
     )
     account_id = created["account"]["id"]
-    payload = run_cli("test-account", "--root", str(tmp_path), "--account-id", str(account_id))
-    assert payload["success"] is True
-    assert payload["connectivity_status"] == "connected"
+    payload = run_cli("test-account-mail-capability", "--root", str(tmp_path), "--account-id", str(account_id))
+    assert payload["success"] is False
+    assert payload["connectivity_status"] == "action_required"
 
 
 def test_sync_mail_and_list_mail_cli(tmp_path: Path) -> None:
@@ -118,9 +118,30 @@ def test_sync_mail_and_list_mail_cli(tmp_path: Path) -> None:
         email="mail@example.com",
         password="Password123!",
     )
-    services.settings.save({"use_mock_driver": True})
+    settings = services.settings.load()
+    settings["mock_mode"] = True
+    services.settings.save(settings)
 
-    payload = run_cli("sync-mail", "--root", str(tmp_path), "--account-id", str(created.id or 0))
-    assert payload["task_id"] > 0
+    payload = run_cli("sync-mail-batch", "--root", str(tmp_path), "--account-ids", str(created.id or 0))
+    assert payload["success"] == 1
     mail_payload = run_cli("list-mail", "--root", str(tmp_path), "--account-id", str(created.id or 0))
+    assert len(mail_payload["messages"]) > 0
+
+
+def test_sync_mail_due_cli_only_syncs_connected_accounts(tmp_path: Path) -> None:
+    services = bootstrap_services(tmp_path)
+    settings = services.settings.load()
+    settings["mock_mode"] = True
+    services.settings.save(settings)
+    connected = services.accounts.create_account(email="connected@example.com", password="Password123!")
+    services.accounts.update_account_runtime(
+        connected.id or 0,
+        connectivity_status=ConnectivityStatus.CONNECTED,
+        mail_capability_status=MailCapabilityStatus.RECEIVE_ONLY,
+    )
+
+    payload = run_cli("sync-mail-due", "--root", str(tmp_path))
+
+    assert payload["scheduled"] == 1
+    mail_payload = run_cli("list-mail", "--root", str(tmp_path), "--account-id", str(connected.id or 0))
     assert len(mail_payload["messages"]) > 0

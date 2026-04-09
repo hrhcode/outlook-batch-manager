@@ -15,8 +15,10 @@ class AccountStatus(StrEnum):
 
 class ConnectivityStatus(StrEnum):
     UNKNOWN = "unknown"
+    CONNECTABLE = "connectable"
     CONNECTED = "connected"
     FAILED = "failed"
+    ACTION_REQUIRED = "action_required"
 
 
 class TokenStatus(StrEnum):
@@ -54,10 +56,13 @@ class MailProvider(StrEnum):
 
 class MailSource(StrEnum):
     AUTO = "auto"
-    GRAPH = "graph"
     IMAP = "imap"
-    POP = "pop"
     MOCK = "mock"
+
+
+class MailCapabilityStatus(StrEnum):
+    NOT_READY = "not_ready"
+    RECEIVE_ONLY = "receive_only"
 
 
 @dataclass(slots=True)
@@ -73,8 +78,11 @@ class Account:
     client_id_override: str = ""
     import_format: str = "manual"
     connectivity_status: ConnectivityStatus = ConnectivityStatus.UNKNOWN
+    mail_capability_status: MailCapabilityStatus = MailCapabilityStatus.NOT_READY
     created_at: datetime | None = None
     last_login_check_at: datetime | None = None
+    last_mail_sync_at: datetime | None = None
+    last_error: str = ""
     id: int | None = None
 
 
@@ -83,6 +91,8 @@ class AccountSummary:
     account: Account
     token_status: str = ""
     token_expires_at: datetime | None = None
+    has_refresh_token: bool = False
+    has_client_id: bool = False
 
 
 @dataclass(slots=True)
