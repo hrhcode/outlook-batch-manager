@@ -208,9 +208,30 @@ tr,
 }
 
 .topbar {
-  justify-content: flex-end;
-  padding: 0;
-  min-height: 38px;
+  justify-content: space-between;
+  padding: 2px 0 0;
+  min-height: 52px;
+  gap: 16px;
+}
+
+.topbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.topbar-copy h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.04em;
+}
+
+.topbar-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 760px;
 }
 
 .topbar-actions,
@@ -285,6 +306,11 @@ tr,
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.page-actions-row {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .status-pill {
@@ -779,7 +805,6 @@ input[type="checkbox"] {
     grid-template-columns: 1fr;
   }
 
-  .page-title,
   .topbar,
   .toolbar {
     flex-direction: column;

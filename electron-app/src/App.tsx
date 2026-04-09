@@ -58,6 +58,29 @@ const navigation: Array<{ id: AppView; label: string }> = [
   { id: "settings", label: "设置" },
 ];
 
+const viewContent: Record<AppView, { title: string; description: string }> = {
+  dashboard: {
+    title: "仪表盘",
+    description: "把账号、注册和收件的关键状态压缩在一个更轻盈的总览页里。",
+  },
+  register: {
+    title: "批量注册",
+    description: "把注册配置、当前批次、错误追踪和结果回看收敛在一个工作台里，不再分散到其他页面。",
+  },
+  accounts: {
+    title: "账号库",
+    description: "集中管理已有账号，支持手动添加、Excel 导入、单个测试和整库批量联通测试。",
+  },
+  mail: {
+    title: "邮件",
+    description: "汇总所有账号已经同步到本地的邮件，支持按账号、来源、关键字和未读状态筛选。",
+  },
+  settings: {
+    title: "设置",
+    description: "统一管理浏览器、OAuth、代理池和邮件同步策略，避免分散配置造成混乱。",
+  },
+};
+
 export default function App() {
   const [snapshot, setSnapshot] = useState<AppSnapshot | null>(null);
   const [meta, setMeta] = useState<{ projectRoot: string; pythonExecutable: string } | null>(null);
@@ -334,6 +357,8 @@ export default function App() {
     return <div className="shell loading">Loading workspace...</div>;
   }
 
+  const currentView = viewContent[activeView];
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -358,7 +383,10 @@ export default function App() {
 
       <main className="content">
         <section className="topbar">
-          <div />
+          <div className="topbar-copy">
+            <h2>{currentView.title}</h2>
+            <p>{currentView.description}</p>
+          </div>
           <div className="topbar-actions">
             <button
               type="button"
