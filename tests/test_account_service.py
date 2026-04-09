@@ -42,3 +42,27 @@ def test_account_summary_contains_token_info(tmp_path: Path) -> None:
     )
     summary = service.list_account_summaries()[0]
     assert summary.token_status == TokenStatus.VALID
+
+
+def test_import_text_formats_store_refresh_token_and_provider(tmp_path: Path) -> None:
+    source = tmp_path / "accounts.txt"
+    source.write_text(
+        "\n".join(
+            [
+                "alpha@outlook.com----Password123!",
+                "beta@hotmail.com----Password456!----client-123----refresh-456",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    service = AccountService(Database(tmp_path / "app.db"))
+
+    imported = service.import_accounts(source)
+
+    assert imported == 2
+    summaries = service.list_account_summaries()
+    assert summaries[0].account.mail_provider == "hotmail"
+    token = service.get_token(summaries[0].account.id or 0)
+    assert token is not None
+    assert token.refresh_token == "refresh-456"
+    assert token.status == TokenStatus.STORED

@@ -92,3 +92,35 @@ def test_import_proxies_cli_imports_text_file(tmp_path: Path) -> None:
     assert payload["imported"] == 2
     snapshot = run_cli("snapshot", "--root", str(tmp_path))
     assert snapshot["summary"]["proxy_count"] == 2
+
+
+def test_create_account_and_test_account_cli(tmp_path: Path) -> None:
+    created = run_cli(
+        "create-account",
+        "--root",
+        str(tmp_path),
+        "--email",
+        "manual@example.com",
+        "--password",
+        "Password123!",
+        "--provider",
+        "outlook",
+    )
+    account_id = created["account"]["id"]
+    payload = run_cli("test-account", "--root", str(tmp_path), "--account-id", str(account_id))
+    assert payload["success"] is True
+    assert payload["connectivity_status"] == "connected"
+
+
+def test_sync_mail_and_list_mail_cli(tmp_path: Path) -> None:
+    services = bootstrap_services(tmp_path)
+    created = services.accounts.create_account(
+        email="mail@example.com",
+        password="Password123!",
+    )
+    services.settings.save({"use_mock_driver": True})
+
+    payload = run_cli("sync-mail", "--root", str(tmp_path), "--account-id", str(created.id or 0))
+    assert payload["task_id"] > 0
+    mail_payload = run_cli("list-mail", "--root", str(tmp_path), "--account-id", str(created.id or 0))
+    assert len(mail_payload["messages"]) > 0

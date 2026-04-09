@@ -13,16 +13,24 @@ class AccountStatus(StrEnum):
     DISABLED = "disabled"
 
 
+class ConnectivityStatus(StrEnum):
+    UNKNOWN = "unknown"
+    CONNECTED = "connected"
+    FAILED = "failed"
+
+
 class TokenStatus(StrEnum):
     VALID = "valid"
     EXPIRED = "expired"
     FAILED = "failed"
+    STORED = "stored"
 
 
 class TaskType(StrEnum):
     REGISTER = "register"
     LOGIN_CHECK = "login_check"
     TOKEN_REFRESH = "token_refresh"
+    MAIL_SYNC = "mail_sync"
 
 
 class TaskStatus(StrEnum):
@@ -39,6 +47,19 @@ class ProxyStatus(StrEnum):
     UNHEALTHY = "unhealthy"
 
 
+class MailProvider(StrEnum):
+    OUTLOOK = "outlook"
+    HOTMAIL = "hotmail"
+
+
+class MailSource(StrEnum):
+    AUTO = "auto"
+    GRAPH = "graph"
+    IMAP = "imap"
+    POP = "pop"
+    MOCK = "mock"
+
+
 @dataclass(slots=True)
 class Account:
     email: str
@@ -48,6 +69,10 @@ class Account:
     group_name: str = "default"
     notes: str = ""
     recovery_email: str = ""
+    mail_provider: MailProvider = MailProvider.OUTLOOK
+    client_id_override: str = ""
+    import_format: str = "manual"
+    connectivity_status: ConnectivityStatus = ConnectivityStatus.UNKNOWN
     created_at: datetime | None = None
     last_login_check_at: datetime | None = None
     id: int | None = None
@@ -123,3 +148,34 @@ class TaskProgress:
     failure_count: int = 0
     latest_message: str = ""
     recent_logs: list[TaskLogRecord] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class MessageRecord:
+    account_id: int
+    source: MailSource
+    message_id: str
+    internet_message_id: str = ""
+    folder_name: str = "Inbox"
+    subject: str = ""
+    from_address: str = ""
+    to_address: str = ""
+    received_at: datetime | None = None
+    is_read: bool = False
+    has_attachments: bool = False
+    snippet: str = ""
+    raw_payload: str = ""
+    synced_at: datetime | None = None
+    id: int | None = None
+
+
+@dataclass(slots=True)
+class MailSyncRun:
+    account_id: int | None
+    source: MailSource
+    status: TaskStatus
+    message_count: int = 0
+    latest_error: str = ""
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    id: int | None = None

@@ -42,6 +42,10 @@ class Database:
                     group_name TEXT NOT NULL,
                     notes TEXT NOT NULL DEFAULT '',
                     recovery_email TEXT NOT NULL DEFAULT '',
+                    mail_provider TEXT NOT NULL DEFAULT 'outlook',
+                    client_id_override TEXT NOT NULL DEFAULT '',
+                    import_format TEXT NOT NULL DEFAULT 'manual',
+                    connectivity_status TEXT NOT NULL DEFAULT 'unknown',
                     created_at TEXT NOT NULL,
                     last_login_check_at TEXT
                 );
@@ -86,8 +90,58 @@ class Database:
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
                 );
+
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    message_id TEXT NOT NULL,
+                    internet_message_id TEXT NOT NULL DEFAULT '',
+                    folder_name TEXT NOT NULL DEFAULT 'Inbox',
+                    subject TEXT NOT NULL DEFAULT '',
+                    from_address TEXT NOT NULL DEFAULT '',
+                    to_address TEXT NOT NULL DEFAULT '',
+                    received_at TEXT,
+                    is_read INTEGER NOT NULL DEFAULT 0,
+                    has_attachments INTEGER NOT NULL DEFAULT 0,
+                    snippet TEXT NOT NULL DEFAULT '',
+                    raw_payload TEXT NOT NULL DEFAULT '',
+                    synced_at TEXT NOT NULL,
+                    FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+                    UNIQUE(account_id, source, message_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS mail_sync_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    account_id INTEGER,
+                    source TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    message_count INTEGER NOT NULL DEFAULT 0,
+                    latest_error TEXT NOT NULL DEFAULT '',
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_messages_account_received
+                    ON messages(account_id, received_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_mail_sync_runs_started
+                    ON mail_sync_runs(started_at DESC);
                 """
             )
+            self._ensure_column(connection, "accounts", "mail_provider", "TEXT NOT NULL DEFAULT 'outlook'")
+            self._ensure_column(connection, "accounts", "client_id_override", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(connection, "accounts", "import_format", "TEXT NOT NULL DEFAULT 'manual'")
+            self._ensure_column(connection, "accounts", "connectivity_status", "TEXT NOT NULL DEFAULT 'unknown'")
+
+    def _ensure_column(self, connection: sqlite3.Connection, table_name: str, column_name: str, spec: str) -> None:
+        existing = {
+            row["name"]
+            for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if column_name in existing:
+            return
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {spec}")
 
     @staticmethod
     def encode_json(payload: dict) -> str:
@@ -96,4 +150,3 @@ class Database:
     @staticmethod
     def now_iso() -> str:
         return datetime.now().isoformat(timespec="seconds")
-
