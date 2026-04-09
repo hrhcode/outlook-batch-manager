@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from outlook_batch_manager.models import Account, ProxyRecord, TaskProgress, TaskRecord
+from outlook_batch_manager.models import AccountSummary, ProxyRecord, TaskProgress, TaskRecord
 
 
 class DashboardPage(QWidget):
@@ -187,8 +187,8 @@ class AccountsPage(QWidget):
             row.addWidget(widget)
         layout.addLayout(row)
 
-        self.table = QTableWidget(0, 8)
-        self.table.setHorizontalHeaderLabels(["邮箱", "密码", "状态", "来源", "分组", "恢复邮箱", "上次校验", "备注"])
+        self.table = QTableWidget(0, 10)
+        self.table.setHorizontalHeaderLabels(["邮箱", "密码", "状态", "Token 状态", "Token 过期", "来源", "分组", "恢复邮箱", "上次校验", "备注"])
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
 
@@ -200,13 +200,16 @@ class AccountsPage(QWidget):
     def keyword(self) -> str:
         return self.search.text().strip()
 
-    def set_accounts(self, accounts: list[Account]) -> None:
+    def set_accounts(self, accounts: list[AccountSummary]) -> None:
         self.table.setRowCount(len(accounts))
-        for row_index, account in enumerate(accounts):
+        for row_index, summary in enumerate(accounts):
+            account = summary.account
             values = [
                 account.email,
                 account.password,
                 account.status,
+                summary.token_status,
+                summary.token_expires_at.isoformat(sep=" ", timespec="seconds") if summary.token_expires_at else "",
                 account.source,
                 account.group_name,
                 account.recovery_email,
@@ -280,4 +283,3 @@ class SettingsPage(QWidget):
                 "scopes": [line.strip() for line in self.scopes.toPlainText().splitlines() if line.strip()],
             }
         )
-

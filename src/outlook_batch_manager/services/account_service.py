@@ -7,7 +7,7 @@ from typing import Iterable
 
 from openpyxl import Workbook, load_workbook
 
-from outlook_batch_manager.models import Account, AccountStatus, TokenRecord, TokenStatus
+from outlook_batch_manager.models import Account, AccountStatus, AccountSummary, TokenRecord, TokenStatus
 from outlook_batch_manager.storage.database import Database
 
 
@@ -26,6 +26,32 @@ class AccountService:
         with self.database.connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [self._row_to_account(row) for row in rows]
+
+    def list_account_summaries(self, keyword: str = "") -> list[AccountSummary]:
+        sql = """
+            SELECT
+                accounts.*,
+                tokens.status AS token_status,
+                tokens.expires_at AS token_expires_at
+            FROM accounts
+            LEFT JOIN tokens ON tokens.account_id = accounts.id
+        """
+        params: tuple[str, ...] = ()
+        if keyword:
+            sql += " WHERE accounts.email LIKE ? OR accounts.group_name LIKE ? OR accounts.notes LIKE ?"
+            term = f"%{keyword}%"
+            params = (term, term, term)
+        sql += " ORDER BY accounts.id DESC"
+        with self.database.connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [
+            AccountSummary(
+                account=self._row_to_account(row),
+                token_status=row["token_status"] or "",
+                token_expires_at=datetime.fromisoformat(row["token_expires_at"]) if row["token_expires_at"] else None,
+            )
+            for row in rows
+        ]
 
     def upsert_account(self, account: Account) -> Account:
         now = account.created_at.isoformat(timespec="seconds") if account.created_at else self.database.now_iso()
@@ -202,4 +228,3 @@ class AccountService:
             created_at=datetime.fromisoformat(row["created_at"]),
             last_login_check_at=datetime.fromisoformat(row["last_login_check_at"]) if row["last_login_check_at"] else None,
         )
-

@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from outlook_batch_manager.models import Account, AccountStatus
+from datetime import datetime, timedelta
+
+from outlook_batch_manager.models import Account, AccountStatus, TokenRecord, TokenStatus
 from outlook_batch_manager.services.account_service import AccountService
 from outlook_batch_manager.storage.database import Database
 
@@ -25,3 +27,18 @@ def test_export_and_import_accounts(tmp_path: Path) -> None:
     assert imported_count == 1
     assert imported_service.list_accounts()[0].email == "a@example.com"
 
+
+def test_account_summary_contains_token_info(tmp_path: Path) -> None:
+    service = AccountService(Database(tmp_path / "app.db"))
+    account = service.upsert_account(Account(email="a@example.com", password="Password123!", status=AccountStatus.ACTIVE))
+    service.save_token(
+        TokenRecord(
+            account_id=account.id or 0,
+            access_token="access",
+            refresh_token="refresh",
+            expires_at=datetime.now() + timedelta(hours=1),
+            status=TokenStatus.VALID,
+        )
+    )
+    summary = service.list_account_summaries()[0]
+    assert summary.token_status == TokenStatus.VALID

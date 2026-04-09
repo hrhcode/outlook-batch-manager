@@ -54,6 +54,13 @@ class Account:
 
 
 @dataclass(slots=True)
+class AccountSummary:
+    account: Account
+    token_status: str = ""
+    token_expires_at: datetime | None = None
+
+
+@dataclass(slots=True)
 class TokenRecord:
     account_id: int
     access_token: str = ""
@@ -116,4 +123,3 @@ class TaskProgress:
     failure_count: int = 0
     latest_message: str = ""
     recent_logs: list[TaskLogRecord] = field(default_factory=list)
-

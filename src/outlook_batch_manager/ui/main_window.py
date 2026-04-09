@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         self.settings_page.set_settings(self.services.settings.load())
 
     def refresh_accounts(self) -> None:
-        accounts = self.services.accounts.list_accounts(self.accounts_page.keyword())
+        accounts = self.services.accounts.list_account_summaries(self.accounts_page.keyword())
         self.accounts_page.set_accounts(accounts)
         self.dashboard_page.update_summary(len(accounts), len(self.services.proxies.list_proxies()), len(self.services.tasks.runner.list_tasks()))
 
