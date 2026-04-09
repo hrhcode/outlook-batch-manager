@@ -81,4 +81,3 @@ class MockAutomationDriver(AutomationDriver):
             refresh_token=refresh_token or f"mock-refresh-{email}",
             expires_at=datetime.now() + timedelta(hours=1),
         )
-

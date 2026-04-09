@@ -1,13 +1,22 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StatusBanner } from "./components/StatusBanner";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { compactPath } from "./lib/format";
 import { AccountsPage } from "./pages/AccountsPage";
+import { BatchRegisterPage } from "./pages/BatchRegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { ProxiesPage } from "./pages/ProxiesPage";
+import { MailPage } from "./pages/MailPage";
 import { SettingsPage } from "./pages/SettingsPage";
-import { TasksPage } from "./pages/TasksPage";
-import type { AppSettings, AppSnapshot, AppView, RunTaskPayload, ThemeMode } from "./types";
+import type {
+  AppSettings,
+  AppSnapshot,
+  AppView,
+  CreateAccountPayload,
+  MailMessageItem,
+  MailQueryPayload,
+  ThemeMode,
+} from "./types";
 
 const emptySettings: AppSettings = {
   browser_channel: "chromium",
@@ -20,14 +29,34 @@ const emptySettings: AppSettings = {
   client_id: "",
   redirect_url: "",
   scopes: [],
+  mail_sync: {
+    default_source: "auto",
+    batch_limit: 20,
+    unread_only: false,
+    graph_fallback_to_imap: true,
+  },
+  mail_protocols: {
+    imap: {
+      enabled: false,
+      host: "outlook.office365.com",
+      port: 993,
+      use_ssl: true,
+    },
+    pop: {
+      enabled: false,
+      host: "outlook.office365.com",
+      port: 995,
+      use_ssl: true,
+    },
+  },
 };
 
-const navigation: Array<{ id: AppView; label: string; eyebrow: string }> = [
-  { id: "dashboard", label: "仪表盘", eyebrow: "Overview" },
-  { id: "tasks", label: "任务中心", eyebrow: "Tasks" },
-  { id: "accounts", label: "账号库", eyebrow: "Accounts" },
-  { id: "proxies", label: "代理池", eyebrow: "Proxies" },
-  { id: "settings", label: "系统设置", eyebrow: "Settings" },
+const navigation: Array<{ id: AppView; label: string; eyebrow: string; description: string }> = [
+  { id: "dashboard", label: "仪表盘", eyebrow: "Overview", description: "看全局概览" },
+  { id: "register", label: "批量注册", eyebrow: "Register", description: "集中配置批次" },
+  { id: "accounts", label: "账号库", eyebrow: "Accounts", description: "管理现有账号" },
+  { id: "mail", label: "邮件", eyebrow: "Mailbox", description: "聚合查看收件" },
+  { id: "settings", label: "设置", eyebrow: "Settings", description: "系统和协议参数" },
 ];
 
 export default function App() {
@@ -35,6 +64,7 @@ export default function App() {
   const [meta, setMeta] = useState<{ projectRoot: string; pythonExecutable: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [mailLoading, setMailLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeView, setActiveView] = useState<AppView>("dashboard");
@@ -50,6 +80,13 @@ export default function App() {
     fetchToken: true,
     headless: false,
   });
+  const [mailFilters, setMailFilters] = useState({
+    accountId: null as number | null,
+    keyword: "",
+    unreadOnly: false,
+    source: "",
+  });
+  const [mailMessages, setMailMessages] = useState<MailMessageItem[]>([]);
 
   useEffect(() => {
     const stored = window.localStorage.getItem("obm-theme");
@@ -65,26 +102,41 @@ export default function App() {
 
   async function loadSnapshot() {
     try {
-      const [nextSnapshot, nextMeta] = await Promise.all([
-        window.desktopApi.getSnapshot(),
-        window.desktopApi.getMeta(),
-      ]);
+      const [nextSnapshot, nextMeta] = await Promise.all([window.desktopApi.getSnapshot(), window.desktopApi.getMeta()]);
       setSnapshot(nextSnapshot);
       setMeta(nextMeta);
       if (activeView !== "settings" || !snapshot) {
         setSettingsDraft(nextSnapshot.settings);
       }
-      setError("");
-      if (nextSnapshot.tasks.length) {
-        const selectedStillExists = nextSnapshot.tasks.some((task) => task.id === selectedTaskId);
+      const registerTasks = nextSnapshot.tasks.filter((task) => task.task_type === "register");
+      if (registerTasks.length > 0) {
+        const selectedStillExists = registerTasks.some((task) => task.id === selectedTaskId);
         if (selectedTaskId === null || !selectedStillExists) {
-          setSelectedTaskId(nextSnapshot.tasks[0].id);
+          setSelectedTaskId(registerTasks[0].id);
         }
       }
+      setError("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "读取数据失败");
+      setError(caught instanceof Error ? caught.message : "读取工作台数据失败");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMail(payload?: Partial<MailQueryPayload>) {
+    setMailLoading(true);
+    try {
+      const result = await window.desktopApi.listMail({
+        accountId: payload?.accountId ?? mailFilters.accountId ?? undefined,
+        keyword: payload?.keyword ?? mailFilters.keyword,
+        unreadOnly: payload?.unreadOnly ?? mailFilters.unreadOnly,
+        source: payload?.source ?? mailFilters.source,
+      });
+      setMailMessages(result.messages);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "读取邮件列表失败");
+    } finally {
+      setMailLoading(false);
     }
   }
 
@@ -96,12 +148,18 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (activeView === "mail") {
+      void loadMail();
+    }
+  }, [activeView, mailFilters.accountId, mailFilters.keyword, mailFilters.unreadOnly, mailFilters.source]);
+
   const filteredAccounts = useMemo(() => {
     const allAccounts = snapshot?.accounts ?? [];
     return allAccounts.filter((account) => {
       const keywordMatch = !accountKeyword.trim()
         ? true
-        : [account.email, account.group_name, account.notes, account.status]
+        : [account.email, account.group_name, account.notes, account.status, account.mail_provider]
             .join(" ")
             .toLowerCase()
             .includes(accountKeyword.toLowerCase());
@@ -110,18 +168,45 @@ export default function App() {
     });
   }, [snapshot, accountKeyword, accountStatus]);
 
-  async function runTask(payload: RunTaskPayload, successText: string) {
+  const registerTasks = useMemo(
+    () => (snapshot?.tasks ?? []).filter((task) => task.task_type === "register"),
+    [snapshot],
+  );
+
+  async function runRegisterTask() {
     setBusy(true);
     setNotice("");
     setError("");
     try {
-      const result = await window.desktopApi.runTask(payload);
+      const result = await window.desktopApi.runTask({
+        taskType: "register",
+        batchSize: registerConfig.batchSize,
+        concurrentWorkers: registerConfig.concurrentWorkers,
+        maxRetries: registerConfig.maxRetries,
+        fetchToken: registerConfig.fetchToken,
+        headless: registerConfig.headless,
+      });
       setSelectedTaskId(result.task_id);
-      setActiveView("tasks");
       await loadSnapshot();
-      setNotice(successText);
+      setActiveView("register");
+      setNotice("批量注册任务已启动。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "任务执行失败");
+      setError(caught instanceof Error ? caught.message : "启动注册任务失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runBulkConnectivityTest() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      await window.desktopApi.runTask({ taskType: "login_check" });
+      await loadSnapshot();
+      setNotice("批量联通测试已启动。");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "批量联通测试失败");
     } finally {
       setBusy(false);
     }
@@ -135,7 +220,7 @@ export default function App() {
     try {
       await window.desktopApi.saveSettings(settingsDraft);
       await loadSnapshot();
-      setNotice("设置已保存");
+      setNotice("设置已保存。");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存设置失败");
     } finally {
@@ -151,7 +236,7 @@ export default function App() {
       const result = await window.desktopApi.importAccounts();
       if (!("cancelled" in result && result.cancelled)) {
         await loadSnapshot();
-        setNotice(`已导入 ${result.imported} 条账号`);
+        setNotice(`已导入 ${result.imported} 条账号。`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "导入账号失败");
@@ -170,7 +255,7 @@ export default function App() {
         status: accountStatus,
       });
       if (!("cancelled" in result && result.cancelled)) {
-        setNotice(`已导出 ${result.exported} 条账号`);
+        setNotice(`已导出 ${result.exported} 条账号。`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "导出账号失败");
@@ -187,7 +272,7 @@ export default function App() {
       const result = await window.desktopApi.importProxies();
       if (!("cancelled" in result && result.cancelled)) {
         await loadSnapshot();
-        setNotice(`已导入 ${result.imported} 条代理`);
+        setNotice(`已导入 ${result.imported} 条代理。`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "导入代理失败");
@@ -196,14 +281,61 @@ export default function App() {
     }
   }
 
-  function openTask(taskId: number | null) {
-    setActiveView("tasks");
-    setSelectedTaskId(taskId);
+  async function createAccount(payload: CreateAccountPayload) {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      await window.desktopApi.createAccount(payload);
+      await loadSnapshot();
+      setNotice("账号已写入账号库。");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "手动添加账号失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testAccount(accountId: number) {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      const result = await window.desktopApi.testAccount(accountId);
+      await loadSnapshot();
+      setNotice(result.message);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "账号联通测试失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncMail() {
+    setBusy(true);
+    setNotice("");
+    setError("");
+    try {
+      await window.desktopApi.syncMail({
+        accountId: mailFilters.accountId ?? undefined,
+        source: mailFilters.source || settingsDraft.mail_sync.default_source,
+        limit: settingsDraft.mail_sync.batch_limit,
+        unreadOnly: mailFilters.unreadOnly,
+      });
+      await Promise.all([loadSnapshot(), loadMail()]);
+      setNotice("邮件同步任务已完成。");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "邮件同步失败");
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (loading || !snapshot) {
     return <div className="shell loading">Loading workspace...</div>;
   }
+
+  const viewMeta = navigation.find((item) => item.id === activeView) ?? navigation[0];
 
   return (
     <div className="shell">
@@ -211,7 +343,7 @@ export default function App() {
         <div className="brand">
           <span className="brand-mark" />
           <div>
-            <p className="eyebrow">Electron Frontend</p>
+            <p className="eyebrow">Electron + Python</p>
             <h1>Outlook Batch Manager</h1>
           </div>
         </div>
@@ -225,7 +357,7 @@ export default function App() {
               onClick={() => setActiveView(item.id)}
             >
               <span>{item.label}</span>
-              <small>{item.eyebrow}</small>
+              <small>{item.description}</small>
             </button>
           ))}
         </nav>
@@ -249,13 +381,13 @@ export default function App() {
       <main className="content">
         <section className="topbar">
           <div>
-            <p className="eyebrow">Workspace</p>
-            <h2>单一前端工作台</h2>
+            <p className="eyebrow">{viewMeta.eyebrow}</p>
+            <h2>{viewMeta.label}</h2>
           </div>
           <div className="topbar-actions">
             <ThemeSwitch theme={theme} onChange={setTheme} />
             <button className="ghost-button" onClick={() => void loadSnapshot()} disabled={busy}>
-              刷新视图
+              刷新工作台
             </button>
           </div>
         </section>
@@ -263,19 +395,19 @@ export default function App() {
         <StatusBanner error={error} notice={notice} />
 
         {activeView === "dashboard" ? (
-          <DashboardPage snapshot={snapshot} onRefresh={() => void loadSnapshot()} onOpenTask={openTask} />
+          <DashboardPage snapshot={snapshot} onNavigate={setActiveView} />
         ) : null}
 
-        {activeView === "tasks" ? (
-          <TasksPage
-            tasks={snapshot.tasks}
+        {activeView === "register" ? (
+          <BatchRegisterPage
+            tasks={registerTasks}
             selectedTaskId={selectedTaskId}
             registerConfig={registerConfig}
             busy={busy}
-            onRefresh={() => void loadSnapshot()}
             onSelectTask={setSelectedTaskId}
             onConfigChange={(patch) => setRegisterConfig((current) => ({ ...current, ...patch }))}
-            onRunTask={(payload, successText) => void runTask(payload, successText)}
+            onRunRegister={() => void runRegisterTask()}
+            onRefresh={() => void loadSnapshot()}
           />
         ) : null}
 
@@ -290,24 +422,34 @@ export default function App() {
             onRefresh={() => void loadSnapshot()}
             onImport={() => void importAccounts()}
             onExport={() => void exportAccounts()}
+            onCreateAccount={(payload) => void createAccount(payload)}
+            onTestAccount={(accountId) => void testAccount(accountId)}
+            onBulkTest={() => void runBulkConnectivityTest()}
           />
         ) : null}
 
-        {activeView === "proxies" ? (
-          <ProxiesPage
-            proxies={snapshot.proxies}
+        {activeView === "mail" ? (
+          <MailPage
+            accounts={snapshot.accounts}
+            messages={mailMessages}
+            recentRuns={snapshot.recent_mail_sync}
+            filters={mailFilters}
             busy={busy}
-            onImport={() => void importProxies()}
-            onRefresh={() => void loadSnapshot()}
+            loading={mailLoading}
+            onFiltersChange={(patch) => setMailFilters((current) => ({ ...current, ...patch }))}
+            onSync={() => void syncMail()}
+            onRefresh={() => void loadMail()}
           />
         ) : null}
 
         {activeView === "settings" ? (
           <SettingsPage
             settings={settingsDraft}
+            proxies={snapshot.proxies}
             busy={busy}
             onChange={setSettingsDraft}
             onSave={(event) => void saveSettings(event)}
+            onImportProxies={() => void importProxies()}
           />
         ) : null}
       </main>

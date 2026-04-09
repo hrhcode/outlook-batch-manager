@@ -1,91 +1,145 @@
 import { MetricCard } from "../components/MetricCard";
 import { PageTitle } from "../components/PageTitle";
-import { formatDateTime, formatStatus, formatTaskType } from "../lib/format";
-import type { AppSnapshot } from "../types";
+import type { AppSnapshot, AppView } from "../types";
 
-export function DashboardPage(props: {
+type DashboardPageProps = {
   snapshot: AppSnapshot;
-  onRefresh: () => void;
-  onOpenTask: (taskId: number | null) => void;
-}) {
-  const latestTask = props.snapshot.latest_task_summary;
+  onNavigate: (view: AppView) => void;
+};
+
+export function DashboardPage(props: DashboardPageProps) {
+  const latestRegisterTask = props.snapshot.tasks.find((task) => task.task_type === "register") ?? null;
+  const latestMailRun = props.snapshot.recent_mail_sync[0] ?? null;
 
   return (
-    <div className="page-stack">
+    <section className="page-stack">
       <PageTitle
-        eyebrow="Overview"
+        eyebrow="Dashboard"
         title="仪表盘"
-        description="聚合显示账号库、任务执行和代理状态，让你先判断现在该处理什么。"
+        description="只保留当前最值得关注的账号、注册与收件状态，让全局情况一眼可读。"
         actions={
-          <button className="ghost-button" onClick={props.onRefresh}>
-            立即刷新
+          <button className="primary-button" type="button" onClick={() => props.onNavigate("register")}>
+            进入批量注册
           </button>
         }
       />
 
-      <section className="summary-grid">
-        <MetricCard label="账号总数" value={props.snapshot.summary.account_count} hint="已纳入账号库" />
-        <MetricCard label="代理数量" value={props.snapshot.summary.proxy_count} hint="当前代理池可见记录" />
-        <MetricCard label="任务总数" value={props.snapshot.summary.task_count} hint="按任务批次统计" />
+      <section className="metric-grid">
+        <MetricCard label="账号总数" value={props.snapshot.summary.account_count} hint="当前账号库规模" />
+        <MetricCard label="可用账号" value={props.snapshot.summary.active_account_count} hint="状态为 active" />
+        <MetricCard label="已连通账号" value={props.snapshot.summary.connected_account_count} hint="最近联通测试通过" />
+        <MetricCard label="未读邮件" value={props.snapshot.mail_summary.unread_messages} hint="已同步邮件中的未读数" />
       </section>
 
-      <section className="dashboard-grid">
+      <section className="two-column">
         <article className="panel">
-          <div className="panel-heading">
+          <div className="panel-header">
             <div>
-              <p className="eyebrow">Latest Task</p>
-              <h3>最近任务</h3>
+              <p className="eyebrow">Registration</p>
+              <h3>最近注册批次</h3>
             </div>
-            {latestTask ? (
-              <button className="ghost-button" onClick={() => props.onOpenTask(latestTask.id)}>
-                查看详情
-              </button>
-            ) : null}
+            <button className="ghost-button" type="button" onClick={() => props.onNavigate("register")}>
+              查看全部
+            </button>
           </div>
-
-          {latestTask ? (
-            <div className="latest-task-card">
-              <div className="status-chip">{formatStatus(latestTask.status)}</div>
-              <h4>{formatTaskType(latestTask.task_type)}</h4>
-              <p>完成时间 {formatDateTime(latestTask.finished_at)}</p>
-              <div className="task-meta-row">
-                <span>成功 {latestTask.success_count}</span>
-                <span>失败 {latestTask.failure_count}</span>
+          {latestRegisterTask ? (
+            <div className="compact-detail">
+              <div className="key-value-grid">
+                <span>批次状态</span>
+                <strong>{latestRegisterTask.status}</strong>
+                <span>成功 / 失败</span>
+                <strong>
+                  {latestRegisterTask.success_count} / {latestRegisterTask.failure_count}
+                </strong>
+                <span>结束时间</span>
+                <strong>{latestRegisterTask.finished_at ?? "进行中"}</strong>
               </div>
-              {latestTask.latest_error ? <div className="inline-alert">{latestTask.latest_error}</div> : null}
+              {latestRegisterTask.latest_error ? <p className="inline-error">{latestRegisterTask.latest_error}</p> : null}
             </div>
           ) : (
-            <div className="empty-state">当前还没有任务记录。</div>
+            <div className="empty-state">还没有注册批次，先去批量注册页配置第一批任务。</div>
           )}
         </article>
 
         <article className="panel">
-          <div className="panel-heading">
+          <div className="panel-header">
             <div>
-              <p className="eyebrow">Attention</p>
+              <p className="eyebrow">Mailbox</p>
+              <h3>最近邮件同步</h3>
+            </div>
+            <button className="ghost-button" type="button" onClick={() => props.onNavigate("mail")}>
+              打开邮件页
+            </button>
+          </div>
+          {latestMailRun ? (
+            <div className="compact-detail">
+              <div className="key-value-grid">
+                <span>同步来源</span>
+                <strong>{latestMailRun.source}</strong>
+                <span>同步结果</span>
+                <strong>{latestMailRun.status}</strong>
+                <span>邮件数量</span>
+                <strong>{latestMailRun.message_count}</strong>
+                <span>完成时间</span>
+                <strong>{latestMailRun.finished_at ?? latestMailRun.started_at ?? "-"}</strong>
+              </div>
+              {latestMailRun.latest_error ? <p className="inline-error">{latestMailRun.latest_error}</p> : null}
+            </div>
+          ) : (
+            <div className="empty-state">还没有邮件同步记录，邮件页会显示最近同步结果。</div>
+          )}
+        </article>
+      </section>
+
+      <section className="two-column">
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Health</p>
+              <h3>账号健康概览</h3>
+            </div>
+          </div>
+          <div className="simple-list">
+            <div className="simple-list-item">
+              <span>待校验账号</span>
+              <strong>{props.snapshot.summary.pending_account_count}</strong>
+            </div>
+            <div className="simple-list-item">
+              <span>代理数量</span>
+              <strong>{props.snapshot.summary.proxy_count}</strong>
+            </div>
+            <div className="simple-list-item">
+              <span>任务总数</span>
+              <strong>{props.snapshot.summary.task_count}</strong>
+            </div>
+            <div className="simple-list-item">
+              <span>邮件总数</span>
+              <strong>{props.snapshot.mail_summary.total_messages}</strong>
+            </div>
+          </div>
+        </article>
+
+        <article className="panel">
+          <div className="panel-header">
+            <div>
+              <p className="eyebrow">Alerts</p>
               <h3>关键异常</h3>
             </div>
           </div>
-          <div className="alert-list">
-            {props.snapshot.alerts.length ? (
-              props.snapshot.alerts.map((alert, index) => (
-                <button
-                  type="button"
-                  key={`${alert.title}-${index}`}
-                  className="alert-card"
-                  onClick={() => props.onOpenTask(alert.task_id ?? null)}
-                >
+          {props.snapshot.alerts.length > 0 ? (
+            <div className="simple-list">
+              {props.snapshot.alerts.map((alert) => (
+                <div className="alert-card" key={`${alert.title}-${alert.task_id ?? "na"}`}>
                   <strong>{alert.title}</strong>
                   <p>{alert.detail}</p>
-                </button>
-              ))
-            ) : (
-              <div className="empty-state">最近没有高优先级异常。</div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">目前没有新的异常，系统状态稳定。</div>
+          )}
         </article>
       </section>
-    </div>
+    </section>
   );
 }
-

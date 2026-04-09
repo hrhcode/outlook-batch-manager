@@ -20,4 +20,3 @@ export function ThemeSwitch(props: { theme: ThemeMode; onChange: (theme: ThemeMo
     </div>
   );
 }
-

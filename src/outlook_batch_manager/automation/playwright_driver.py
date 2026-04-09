@@ -35,8 +35,8 @@ class PlaywrightAutomationDriver(AutomationDriver):
     def register(self, payload: RegistrationPayload, proxy: str | None = None) -> AutomationResult:
         with self._open_session(proxy) as page:
             page.goto("https://outlook.live.com/mail/0/?prompt=create_account", wait_until="domcontentloaded")
-            self._click_if_exists(page, "同意并继续")
-            page.locator('input[type="email"], [aria-label="新建电子邮件"]').first.fill(payload.email)
+            self._click_if_exists(page, ["Accept", "同意并继续", "I agree"])
+            page.locator('input[type="email"], [name="MemberName"]').first.fill(payload.email)
             self._click_primary(page)
             page.locator('input[type="password"]').first.fill(payload.password)
             self._click_primary(page)
@@ -48,7 +48,11 @@ class PlaywrightAutomationDriver(AutomationDriver):
                 status=AccountStatus.PENDING,
                 source="register_task",
             )
-            return AutomationResult(success=ok, message="注册成功" if ok else "注册后未进入邮箱初始化界面", account=account if ok else None)
+            return AutomationResult(
+                success=ok,
+                message="注册成功" if ok else "注册后未进入邮箱初始化页面",
+                account=account if ok else None,
+            )
 
     def verify_login(self, email: str, password: str, proxy: str | None = None) -> AutomationResult:
         with self._open_session(proxy) as page:
@@ -57,7 +61,7 @@ class PlaywrightAutomationDriver(AutomationDriver):
             self._click_primary(page)
             page.locator('input[type="password"]').first.fill(password)
             self._click_primary(page)
-            self._click_if_exists(page, "否")
+            self._click_if_exists(page, ["Yes", "是", "Stay signed in?"])
             page.wait_for_timeout(3000)
             ok = page.locator('text=Inbox, text=Outlook, text=收件箱').count() > 0
             return AutomationResult(success=ok, message="登录校验成功" if ok else "登录校验失败")
@@ -116,8 +120,7 @@ class PlaywrightAutomationDriver(AutomationDriver):
                 self._click_primary(page)
                 page.locator('input[type="password"]').first.fill(password)
                 self._click_primary(page)
-                self._click_if_exists(page, "接受")
-                self._click_if_exists(page, "同意")
+                self._click_if_exists(page, ["Accept", "接受", "同意"])
             callback_url = callback.value.url
         if "code=" not in callback_url:
             return AutomationResult(success=False, message="OAuth 回调中未拿到 code")
@@ -147,8 +150,8 @@ class PlaywrightAutomationDriver(AutomationDriver):
 
     def _fill_identity(self, page, payload: RegistrationPayload) -> None:
         for selector, value in (
-            ('#lastNameInput', payload.last_name),
-            ('#firstNameInput', payload.first_name),
+            ("#lastNameInput", payload.last_name),
+            ("#firstNameInput", payload.first_name),
             ('[name="BirthYear"]', str(payload.birth_year)),
         ):
             try:
@@ -168,22 +171,36 @@ class PlaywrightAutomationDriver(AutomationDriver):
             page.wait_for_load_state("networkidle", timeout=self.options.timeout_ms)
         except Exception:
             pass
-        return page.locator('text=Outlook, text=Inbox, text=收件箱, [aria-label="新邮件"]').count() > 0
+        return page.locator('text=Outlook, text=Inbox, text=收件箱, [aria-label="New mail"]').count() > 0
 
     def _click_primary(self, page) -> None:
-        for selector in ('[data-testid="primaryButton"]', '#idSIButton9', 'button[type="submit"]'):
+        selectors = (
+            '[data-testid="primaryButton"]',
+            '#idSIButton9',
+            'button[type="submit"]',
+            'input[type="submit"]',
+        )
+        for selector in selectors:
             try:
                 page.locator(selector).first.click(timeout=3000)
                 return
             except Exception:
                 continue
+        for text in ("Next", "下一步", "继续", "Create account", "创建账户", "Sign in"):
+            try:
+                page.get_by_text(text, exact=False).first.click(timeout=2000)
+                return
+            except Exception:
+                continue
         raise RuntimeError("未找到下一步按钮")
 
-    def _click_if_exists(self, page, text: str) -> None:
-        try:
-            page.get_by_text(text, exact=False).first.click(timeout=3000)
-        except Exception:
-            pass
+    def _click_if_exists(self, page, texts: list[str]) -> None:
+        for text in texts:
+            try:
+                page.get_by_text(text, exact=False).first.click(timeout=3000)
+                return
+            except Exception:
+                continue
 
     def _generate_code_verifier(self, length: int = 128) -> str:
         alphabet = string.ascii_letters + string.digits + "-._~"
