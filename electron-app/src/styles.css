@@ -90,7 +90,7 @@ tr,
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 236px minmax(0, 1fr);
 }
 
 .shell.loading {
@@ -102,13 +102,13 @@ tr,
 }
 
 .sidebar {
-  padding: 24px 18px;
+  padding: 18px 14px;
   border-right: 1px solid var(--line);
   background: var(--sidebar);
   backdrop-filter: blur(24px);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .brand,
@@ -129,11 +129,11 @@ tr,
 }
 
 .brand-mark {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 7px var(--panel);
+  box-shadow: 0 0 0 6px var(--panel);
 }
 
 .eyebrow {
@@ -151,8 +151,10 @@ tr,
 }
 
 .brand h1 {
-  font-size: 20px;
+  font-size: 15px;
   letter-spacing: -0.04em;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .nav-list,
@@ -172,20 +174,15 @@ tr,
   background: transparent;
   color: var(--text);
   border-radius: var(--radius-xl);
-  padding: 12px 14px;
+  padding: 11px 12px;
   text-align: left;
   cursor: pointer;
 }
 
 .nav-button span {
   display: block;
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-.nav-button small {
-  color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  margin-bottom: 0;
 }
 
 .nav-button.active,
@@ -204,26 +201,16 @@ tr,
 }
 
 .content {
-  padding: 22px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .topbar {
-  justify-content: space-between;
-  padding: 2px 2px 0;
-}
-
-.topbar-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.topbar-label {
-  color: var(--muted);
-  font-size: 13px;
+  justify-content: flex-end;
+  padding: 0;
+  min-height: 38px;
 }
 
 .topbar-actions,
@@ -294,6 +281,12 @@ tr,
   flex-wrap: wrap;
 }
 
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .status-pill {
   padding: 10px 14px;
   border-radius: var(--radius-pill);
@@ -314,20 +307,20 @@ tr,
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 18px;
+  gap: 14px;
 }
 
 .page-title h2 {
-  font-size: 24px;
+  font-size: 22px;
   letter-spacing: -0.04em;
 }
 
 .page-description {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
-  line-height: 1.65;
+  line-height: 1.6;
   max-width: 700px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .metric-grid,
@@ -401,7 +394,7 @@ tr,
 }
 
 .panel {
-  padding: 18px;
+  padding: 16px;
 }
 
 .panel-compact {
@@ -414,7 +407,7 @@ tr,
 }
 
 .panel-header h3 {
-  font-size: 18px;
+  font-size: 16px;
   letter-spacing: -0.02em;
 }
 
@@ -778,7 +771,7 @@ input[type="checkbox"] {
 
 @media (max-width: 860px) {
   .content {
-    padding: 16px;
+    padding: 14px;
   }
 
   .metric-grid,

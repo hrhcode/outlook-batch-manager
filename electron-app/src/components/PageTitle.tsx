@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 
-export function PageTitle(props: { eyebrow: string; title: string; description: string; actions?: ReactNode }) {
+export function PageTitle(props: { eyebrow?: string; title: string; description: string; actions?: ReactNode }) {
   return (
     <header className="page-title">
       <div>
-        <p className="eyebrow">{props.eyebrow}</p>
+        {props.eyebrow ? <p className="eyebrow">{props.eyebrow}</p> : null}
         <h2>{props.title}</h2>
         <p className="page-description">{props.description}</p>
       </div>
@@ -12,4 +12,3 @@ export function PageTitle(props: { eyebrow: string; title: string; description: 
     </header>
   );
 }
-

@@ -50,12 +50,12 @@ const emptySettings: AppSettings = {
   },
 };
 
-const navigation: Array<{ id: AppView; label: string; eyebrow: string; description: string }> = [
-  { id: "dashboard", label: "仪表盘", eyebrow: "Overview", description: "看全局概览" },
-  { id: "register", label: "批量注册", eyebrow: "Register", description: "集中配置批次" },
-  { id: "accounts", label: "账号库", eyebrow: "Accounts", description: "管理现有账号" },
-  { id: "mail", label: "邮件", eyebrow: "Mailbox", description: "聚合查看收件" },
-  { id: "settings", label: "设置", eyebrow: "Settings", description: "系统和协议参数" },
+const navigation: Array<{ id: AppView; label: string }> = [
+  { id: "dashboard", label: "仪表盘" },
+  { id: "register", label: "批量注册" },
+  { id: "accounts", label: "账号库" },
+  { id: "mail", label: "邮件" },
+  { id: "settings", label: "设置" },
 ];
 
 export default function App() {
@@ -334,17 +334,12 @@ export default function App() {
     return <div className="shell loading">Loading workspace...</div>;
   }
 
-  const viewMeta = navigation.find((item) => item.id === activeView) ?? navigation[0];
-
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark" />
-          <div>
-            <p className="eyebrow">Electron + Python</p>
-            <h1>Outlook Batch Manager</h1>
-          </div>
+          <h1>Outlook Batch Manager</h1>
         </div>
 
         <nav className="nav-list" aria-label="主导航">
@@ -356,7 +351,6 @@ export default function App() {
               onClick={() => setActiveView(item.id)}
             >
               <span>{item.label}</span>
-              <small>{item.description}</small>
             </button>
           ))}
         </nav>
@@ -364,10 +358,7 @@ export default function App() {
 
       <main className="content">
         <section className="topbar">
-          <div className="topbar-copy">
-            <p className="eyebrow">{viewMeta.eyebrow}</p>
-            <span className="topbar-label">{viewMeta.description}</span>
-          </div>
+          <div />
           <div className="topbar-actions">
             <button
               type="button"

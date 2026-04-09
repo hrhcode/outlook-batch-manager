@@ -15,7 +15,6 @@ export function DashboardPage(props: DashboardPageProps) {
   return (
     <section className="page-stack">
       <PageTitle
-        eyebrow="Dashboard"
         title="系统概览"
         description="把账号、注册和收件的关键状态压缩在一个更轻盈的总览页里。"
         actions={
