@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 
@@ -19,3 +20,22 @@ def run() -> int:
     window.show()
     return app.exec()
 
+
+def run_with_logging(project_root: Path, error_stream) -> int:
+    log_dir = project_root / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "startup.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler(log_path, encoding="utf-8"),
+            logging.StreamHandler(error_stream),
+        ],
+    )
+    try:
+        logging.info("Application starting, project root: %s", project_root)
+        return run()
+    except Exception:
+        logging.exception("Application startup failed")
+        raise
