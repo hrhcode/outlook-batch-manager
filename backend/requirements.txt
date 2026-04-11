@@ -1,0 +1,12 @@
+fastapi==0.115.6
+httpx==0.28.1
+imapclient==3.0.1
+pydantic==2.10.4
+sqlalchemy==2.0.36
+uvicorn==0.32.1
+pytest==8.3.4
+pytest-asyncio==0.24.0
+python-multipart==0.0.12
+faker==22.0.0
+playwright==1.53.0
+patchright

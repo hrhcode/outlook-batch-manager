@@ -1,0 +1,16 @@
+{
+  "name": "@core-gateway/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "dev": "wait-on tcp:127.0.0.1:5173 && cross-env NODE_ENV=development VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "build": "node -e \"console.log('desktop runtime uses plain JavaScript; no extra build step required.')\"",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^31.3.1",
+    "wait-on": "^8.0.1"
+  }
+}

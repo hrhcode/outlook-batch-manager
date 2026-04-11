@@ -1,0 +1,2 @@
+"""Core Gateway backend package."""
+
